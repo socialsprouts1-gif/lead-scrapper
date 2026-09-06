@@ -1,0 +1,10 @@
+dist/
+frontend/dist/
+.env
+backend/.env
+frontend/.env
+.DS_Store
+Thumbs.db
+Procfile
+node_modules/
+**/node_modules/
