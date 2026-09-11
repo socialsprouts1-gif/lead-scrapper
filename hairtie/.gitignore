@@ -1,0 +1,19 @@
+node_modules/
+.next/
+.next-profiles/
+out/
+build/
+dist/
+
+# Generated Prisma client — recreated by `npm install` / `prisma generate`
+src/generated/
+
+# Uploaded media (local media driver)
+public/uploads/
+
+.env
+.env*.local
+.DS_Store
+*.pem
+npm-debug.log*
+next-env.d.ts
