@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { formatPaise } from "@/lib/money";
 
 const KEY = "hairtie:recently-viewed";
@@ -10,25 +10,55 @@ const MAX = 8;
 
 export type RecentProduct = { slug: string; name: string; price: number; image: string | null };
 
+/**
+ * localStorage is an external store, so it is read through useSyncExternalStore
+ * rather than copied into state inside an effect. The snapshot is cached by its
+ * raw string so React sees a stable reference between renders.
+ */
+let snapshotCache: { raw: string; parsed: RecentProduct[] } = { raw: "", parsed: [] };
+
+function subscribe(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+function readStore(): RecentProduct[] {
+  let raw = "[]";
+  try {
+    raw = localStorage.getItem(KEY) ?? "[]";
+  } catch {
+    return snapshotCache.parsed;
+  }
+  if (raw !== snapshotCache.raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      snapshotCache = { raw, parsed: Array.isArray(parsed) ? parsed : [] };
+    } catch {
+      snapshotCache = { raw, parsed: [] };
+    }
+  }
+  return snapshotCache.parsed;
+}
+
+const EMPTY: RecentProduct[] = [];
+
 /** Records the current product, then shows the ones seen before it. */
 export function RecentlyViewed({ current }: { current: RecentProduct }) {
-  const [items, setItems] = useState<RecentProduct[]>([]);
+  const stored = useSyncExternalStore(subscribe, readStore, () => EMPTY);
 
+  // Writing the visit back out is a side effect on an external system, which is
+  // exactly what an effect is for.
   useEffect(() => {
-    let stored: RecentProduct[] = [];
     try {
-      stored = JSON.parse(localStorage.getItem(KEY) ?? "[]");
-    } catch {
-      stored = [];
-    }
-    const others = stored.filter((item) => item?.slug && item.slug !== current.slug);
-    setItems(others.slice(0, MAX));
-    try {
+      const existing: RecentProduct[] = JSON.parse(localStorage.getItem(KEY) ?? "[]");
+      const others = existing.filter((item) => item?.slug && item.slug !== current.slug);
       localStorage.setItem(KEY, JSON.stringify([current, ...others].slice(0, MAX + 1)));
     } catch {
       // Private browsing or blocked storage — the feature is simply skipped.
     }
   }, [current]);
+
+  const items = stored.filter((item) => item?.slug && item.slug !== current.slug).slice(0, MAX);
 
   if (items.length === 0) return null;
 

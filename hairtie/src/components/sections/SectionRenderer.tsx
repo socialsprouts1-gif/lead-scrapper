@@ -718,7 +718,6 @@ function VideoBlock({ s }: { s: S }) {
               className="absolute inset-0 h-full w-full border-0"
             />
           ) : (
-            // eslint-disable-next-line jsx-a11y/media-has-caption
             <video
               src={url}
               poster={str(s.posterUrl) || undefined}

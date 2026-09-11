@@ -344,7 +344,7 @@ export function ProductForm({
               </p>
             </button>
           ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onImageDragEnd}>
+            <DndContext id="product-images" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onImageDragEnd}>
               <SortableContext items={values.images.map((image) => image.url)} strategy={rectSortingStrategy}>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {values.images.map((image, index) => (

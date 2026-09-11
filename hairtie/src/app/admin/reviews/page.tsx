@@ -6,8 +6,8 @@ import { requireAdmin } from "@/lib/auth";
 import type { Prisma } from "@/generated/prisma/client";
 import { formatDate } from "@/lib/utils";
 import { AdminPage, EmptyState, PageHeader, Pagination } from "@/components/admin/ui";
-import { ActionButton, FilterSelect, SearchInput } from "@/components/admin/Controls";
-import { deleteReview, setReviewStatus } from "@/app/actions/admin/misc";
+import { FilterSelect, SearchInput } from "@/components/admin/Controls";
+import { ReviewActions } from "@/components/admin/ReviewActions";
 import { Stars } from "@/components/ui/Stars";
 
 const PER_PAGE = 20;
@@ -134,28 +134,7 @@ export default async function AdminReviewsPage(props: PageProps<"/admin/reviews"
                       </p>
                     </div>
 
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      {review.status !== "APPROVED" && (
-                        <ActionButton
-                          action={() => setReviewStatus(review.id, "APPROVED")}
-                          className="adm-btn adm-btn-primary adm-btn-sm"
-                        >
-                          Publish
-                        </ActionButton>
-                      )}
-                      {review.status !== "REJECTED" && (
-                        <ActionButton action={() => setReviewStatus(review.id, "REJECTED")}>
-                          Hide
-                        </ActionButton>
-                      )}
-                      <ActionButton
-                        action={() => deleteReview(review.id)}
-                        className="adm-btn adm-btn-danger adm-btn-sm"
-                        confirm="Delete this review permanently?"
-                      >
-                        Delete
-                      </ActionButton>
-                    </div>
+                    <ReviewActions reviewId={review.id} status={review.status} />
                   </div>
                 </article>
               );

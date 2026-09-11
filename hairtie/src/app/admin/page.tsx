@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/auth";
 import { formatPaise } from "@/lib/money";
+import { daysAgo } from "@/lib/dates";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/orders";
 import { AdminPage, EmptyState, PageHeader, Pill, StatCard } from "@/components/admin/ui";
@@ -12,7 +13,7 @@ import { AdminPage, EmptyState, PageHeader, Pill, StatCard } from "@/components/
 export default async function AdminDashboard() {
   const user = await requireAdmin();
 
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = daysAgo(30);
   const paidOrder = { status: { notIn: ["CANCELLED", "RETURNED", "REFUNDED"] } } satisfies Prisma.OrderWhereInput;
 
   const [

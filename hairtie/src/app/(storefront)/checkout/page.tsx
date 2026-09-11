@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { computeTotals, getCart, lineMrp, linePrice } from "@/lib/cart";
+import { computeTotals, getCart, linePrice } from "@/lib/cart";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";

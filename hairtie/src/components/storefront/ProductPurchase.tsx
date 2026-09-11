@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Heart, Minus, Plus, ShoppingBag } from "lucide-react";
 import { addToCart } from "@/app/actions/cart";
 import { toggleWishlist } from "@/app/actions/wishlist";
@@ -52,6 +52,15 @@ export function ProductPurchase({
   const [adding, startAdding] = useTransition();
   const [buying, startBuying] = useTransition();
   const [savingWish, startWish] = useTransition();
+
+  // Tells the layout that a sticky buy bar is on screen, so the floating
+  // WhatsApp button can move out of its way on phones.
+  useEffect(() => {
+    document.body.dataset.stickyBar = "1";
+    return () => {
+      delete document.body.dataset.stickyBar;
+    };
+  }, []);
 
   const variant = variants.find((v) => v.id === variantId) ?? null;
   const price = variant?.price ?? basePrice;

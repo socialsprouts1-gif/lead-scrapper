@@ -39,7 +39,7 @@ export function ProductGallery({ images, name }: { images: GalleryImage[]; name:
   }
 
   return (
-    <div className="md:flex md:gap-4">
+    <div className="min-w-0 md:flex md:gap-4">
       {/* Desktop thumbnails */}
       <div className="hidden md:flex md:w-20 md:shrink-0 md:flex-col md:gap-3">
         {images.map((image, index) => (
@@ -90,7 +90,7 @@ export function ProductGallery({ images, name }: { images: GalleryImage[]; name:
       </div>
 
       {/* Mobile: swipeable */}
-      <div className="md:hidden">
+      <div className="min-w-0 overflow-hidden md:hidden">
         <div ref={scrollerRef} onScroll={onScroll} className="ht-scroll-x -mx-5">
           {images.map((image, index) => (
             <div

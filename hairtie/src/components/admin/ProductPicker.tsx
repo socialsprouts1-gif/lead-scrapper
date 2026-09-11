@@ -16,36 +16,53 @@ export function ProductPicker({
   onChange: (ids: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Row[]>([]);
-  const [chosen, setChosen] = useState<Row[]>([]);
+  const [fetched, setFetched] = useState<Row[]>([]);
+  const [known, setKnown] = useState<Record<string, Row>>({});
 
+  // Look up the names of already-chosen products.
   useEffect(() => {
-    if (selected.length === 0) {
-      setChosen([]);
-      return;
-    }
-    fetch(`/api/admin/products/lookup?ids=${selected.join(",")}`)
+    if (selected.length === 0) return;
+    const missing = selected.filter((id) => !known[id]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    fetch(`/api/admin/products/lookup?ids=${missing.join(",")}`)
       .then((response) => (response.ok ? response.json() : { products: [] }))
       .then((data) => {
-        const byId = new Map<string, Row>((data.products as Row[]).map((row) => [row.id, row]));
-        setChosen(selected.map((id) => byId.get(id)).filter(Boolean) as Row[]);
+        if (cancelled) return;
+        setKnown((current) => {
+          const next = { ...current };
+          for (const row of data.products as Row[]) next[row.id] = row;
+          return next;
+        });
       })
-      .catch(() => setChosen([]));
-  }, [selected]);
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, known]);
 
+  // Search, debounced.
   useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
+    const term = query.trim();
+    if (!term) return;
+    let cancelled = false;
     const timeout = setTimeout(() => {
-      fetch(`/api/admin/products/lookup?q=${encodeURIComponent(query)}`)
+      fetch(`/api/admin/products/lookup?q=${encodeURIComponent(term)}`)
         .then((response) => (response.ok ? response.json() : { products: [] }))
-        .then((data) => setResults(data.products))
-        .catch(() => setResults([]));
+        .then((data) => {
+          if (!cancelled) setFetched(data.products);
+        })
+        .catch(() => {});
     }, 280);
-    return () => clearTimeout(timeout);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, [query]);
+
+  // Derived, so an empty selection or an empty query needs no state update.
+  const chosen = selected.map((id) => known[id]).filter(Boolean) as Row[];
+  const results = query.trim() ? fetched : [];
 
   return (
     <div>
@@ -92,9 +109,9 @@ export function ProductPicker({
                   type="button"
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--adm-surface)]"
                   onClick={() => {
+                    setKnown((current) => ({ ...current, [product.id]: product }));
                     onChange([...selected, product.id]);
                     setQuery("");
-                    setResults([]);
                   }}
                 >
                   <div className="relative h-8 w-7 shrink-0 overflow-hidden rounded" style={{ background: "var(--adm-surface)" }}>

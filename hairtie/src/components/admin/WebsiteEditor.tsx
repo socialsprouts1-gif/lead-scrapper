@@ -55,8 +55,17 @@ export function WebsiteEditor({
   const [savingField, setSavingField] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  useEffect(() => setSections(initialSections), [initialSections]);
-  useEffect(() => setDirty(hasDraftChanges), [hasDraftChanges]);
+  // Re-sync with the server after a refresh, without an effect.
+  const [syncedSections, setSyncedSections] = useState(initialSections);
+  if (syncedSections !== initialSections) {
+    setSyncedSections(initialSections);
+    setSections(initialSections);
+  }
+  const [syncedDirty, setSyncedDirty] = useState(hasDraftChanges);
+  if (syncedDirty !== hasDraftChanges) {
+    setSyncedDirty(hasDraftChanges);
+    setDirty(hasDraftChanges);
+  }
 
   const selected = sections.find((section) => section.id === selectedId) ?? null;
   const def = selected ? getSectionDef(selected.type) : null;
@@ -285,7 +294,7 @@ export function WebsiteEditor({
                 Click a section in the preview, or in this list, to edit it. Drag the handles to reorder.
               </p>
 
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+              <DndContext id="section-order" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                 <SortableContext items={sections.map((section) => section.id)} strategy={verticalListSortingStrategy}>
                   <ul className="space-y-1">
                     {sections.map((section, index) => (

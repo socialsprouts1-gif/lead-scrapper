@@ -38,7 +38,7 @@ export default async function CartPage() {
         <ShoppingBag size={38} strokeWidth={1} className="mx-auto" style={{ color: "var(--ht-muted)" }} />
         <h1 className="mt-5 text-[2rem]">Your bag is empty</h1>
         <p className="mx-auto mt-2 max-w-sm text-[0.98rem]" style={{ color: "var(--ht-muted)" }}>
-          Have a look at what's new — there's usually something worth adding.
+          Have a look at what&apos;s new — there&apos;s usually something worth adding.
         </p>
         <Link href="/shop" className="ht-btn ht-btn-primary mt-7">Start shopping</Link>
       </div>

@@ -220,6 +220,11 @@ h1, h2, h3, h4 {
 .ht-scroll-x::-webkit-scrollbar { display: none; }
 .ht-scroll-x > * { scroll-snap-align: start; flex: 0 0 auto; }
 
+/* A sticky buy bar takes the bottom-right corner on phones. */
+@media (max-width: 767px) {
+  body[data-sticky-bar="1"] .ht-whatsapp-float { display: none; }
+}
+
 .ht-fade-up {
   animation: ht-fade-up 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }

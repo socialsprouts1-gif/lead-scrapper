@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
@@ -57,7 +57,12 @@ export function CategoryManager({ tree }: { tree: CategoryNode[] }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [pending, start] = useTransition();
 
-  useEffect(() => setOrder(tree), [tree]);
+  // Re-sync with the server after a refresh, without an effect.
+  const [syncedTree, setSyncedTree] = useState(tree);
+  if (syncedTree !== tree) {
+    setSyncedTree(tree);
+    setOrder(tree);
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const flat = tree.flatMap((node) => [node, ...node.children]);
@@ -107,7 +112,7 @@ export function CategoryManager({ tree }: { tree: CategoryNode[] }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
       <div className="adm-card p-2">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <DndContext id="category-order" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={order.map((node) => node.id)} strategy={verticalListSortingStrategy}>
             <ul>
               {order.map((node) => (

@@ -1,6 +1,6 @@
 {
   "name": "hairtie",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -44,5 +44,6 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5"
-  }
+  },
+  "description": "Premium D2C e-commerce store and admin panel for Hairtie"
 }

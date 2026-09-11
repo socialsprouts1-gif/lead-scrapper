@@ -30,10 +30,14 @@ export function Header({
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  // React's "adjust state when a prop changes" pattern: closing the menus on
+  // navigation, without an effect that would cause a second render pass.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (lastPath !== pathname) {
+    setLastPath(pathname);
     setMenuOpen(false);
     setSearchOpen(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);

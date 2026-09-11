@@ -8,8 +8,7 @@ import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/orders";
 import { getSiteSettings } from "@/lib/settings";
 import { whatsappLink } from "@/lib/whatsapp";
 import { AdminPage, PageHeader, Pill, StatCard } from "@/components/admin/ui";
-import { ActionButton } from "@/components/admin/Controls";
-import { setCustomerStatus } from "@/app/actions/admin/misc";
+import { CustomerStatusButton } from "@/components/admin/CustomerStatusButton";
 import { CustomerNote } from "@/components/admin/CustomerNote";
 
 export default async function AdminCustomerPage(props: PageProps<"/admin/customers/[id]">) {
@@ -51,22 +50,7 @@ export default async function AdminCustomerPage(props: PageProps<"/admin/custome
           </a>
         )}
         {customer.role === "CUSTOMER" && (
-          customer.status === "BLOCKED" ? (
-            <ActionButton
-              action={() => setCustomerStatus(customer.id, "ACTIVE")}
-              className="adm-btn adm-btn-ghost"
-            >
-              Unblock
-            </ActionButton>
-          ) : (
-            <ActionButton
-              action={() => setCustomerStatus(customer.id, "BLOCKED")}
-              className="adm-btn adm-btn-danger"
-              confirm="Block this customer? They will not be able to sign in."
-            >
-              Block
-            </ActionButton>
-          )
+          <CustomerStatusButton userId={customer.id} blocked={customer.status === "BLOCKED"} />
         )}
       </PageHeader>
 

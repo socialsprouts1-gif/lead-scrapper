@@ -13,7 +13,7 @@ export function WhatsappFloat({ number, storeName }: { number: string; storeName
       target="_blank"
       rel="noreferrer noopener"
       aria-label={`Chat with ${storeName} on WhatsApp`}
-      className="fixed bottom-20 right-4 z-40 grid h-12 w-12 place-items-center rounded-full shadow-lg transition hover:scale-105 md:bottom-6 md:right-6 md:h-13 md:w-13"
+      className="ht-whatsapp-float fixed bottom-20 right-4 z-40 grid h-12 w-12 place-items-center rounded-full shadow-lg transition hover:scale-105 md:bottom-6 md:right-6"
       style={{ background: "#25D366", color: "#fff" }}
     >
       <WhatsappIcon size={24} />

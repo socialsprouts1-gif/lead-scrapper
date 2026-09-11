@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronDown } from "lucide-react";
@@ -7,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { PRODUCT_CARD_SELECT, averageRating } from "@/lib/catalog";
 import { getSiteSettings } from "@/lib/settings";
 import { buildMetadata, breadcrumbSchema, jsonLd, resolveSiteUrl } from "@/lib/seo";
-import { paiseToRupees, discountPercent, formatPaise } from "@/lib/money";
+import { paiseToRupees, formatPaise } from "@/lib/money";
 import { productInquiryMessage, whatsappLink } from "@/lib/whatsapp";
 import { getWishlistIds } from "@/app/actions/wishlist";
 import { formatDate } from "@/lib/utils";
@@ -171,7 +170,7 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
           <span aria-current="page">{product.name}</span>
         </nav>
 
-        <div className="grid gap-8 lg:grid-cols-2 lg:gap-14">
+        <div className="grid min-w-0 gap-8 lg:grid-cols-2 lg:gap-14">
           <ProductGallery
             images={product.images.map((image) => ({ url: image.url, alt: image.alt }))}
             name={product.name}

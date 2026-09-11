@@ -17,3 +17,4 @@ public/uploads/
 *.pem
 npm-debug.log*
 next-env.d.ts
+tsconfig.tsbuildinfo

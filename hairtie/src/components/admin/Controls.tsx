@@ -1,10 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
-import { useToast } from "@/components/ui/Toast";
-import { Spinner } from "@/components/ui/Spinner";
 
 /** A search box that keeps the query in the URL, debounced. */
 export function SearchInput({ placeholder = "Search…" }: { placeholder?: string }) {
@@ -83,52 +81,5 @@ export function FilterSelect({
         ))}
       </select>
     </div>
-  );
-}
-
-/**
- * A button that runs a server action, shows the result as a toast and refreshes
- * the page. `confirm` asks first — used for anything destructive.
- */
-export function ActionButton({
-  action,
-  children,
-  confirm,
-  className = "adm-btn adm-btn-ghost adm-btn-sm",
-  successMessage,
-  onDone,
-}: {
-  action: () => Promise<{ ok: boolean; message?: string }>;
-  children: React.ReactNode;
-  confirm?: string;
-  className?: string;
-  successMessage?: string;
-  onDone?: () => void;
-}) {
-  const { show } = useToast();
-  const router = useRouter();
-  const [pending, start] = useTransition();
-
-  return (
-    <button
-      type="button"
-      className={className}
-      disabled={pending}
-      onClick={() => {
-        if (confirm && !window.confirm(confirm)) return;
-        start(async () => {
-          const result = await action();
-          const message = result.message ?? (result.ok ? successMessage : "Something went wrong.");
-          if (message) show(message, result.ok ? "default" : "error");
-          if (result.ok) {
-            router.refresh();
-            onDone?.();
-          }
-        });
-      }}
-    >
-      {pending ? <Spinner size={13} /> : null}
-      {children}
-    </button>
   );
 }

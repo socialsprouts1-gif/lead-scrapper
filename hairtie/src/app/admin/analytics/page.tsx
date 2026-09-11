@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { getSiteSettings } from "@/lib/settings";
 import { formatPaise } from "@/lib/money";
+import { dayKeysBack, daysAgo } from "@/lib/dates";
 import { AdminPage, EmptyState, PageHeader, StatCard } from "@/components/admin/ui";
 
 const RANGES = [
@@ -17,7 +18,7 @@ export default async function AdminAnalyticsPage(props: PageProps<"/admin/analyt
   const params = await props.searchParams;
   const days = Number(params.days ?? 30);
   const range = RANGES.find((entry) => entry.days === days) ?? RANGES[1];
-  const since = new Date(Date.now() - range.days * 24 * 60 * 60 * 1000);
+  const since = daysAgo(range.days);
   const settings = await getSiteSettings();
 
   const counted = { status: { notIn: ["CANCELLED" as const] }, placedAt: { gte: since } };
@@ -64,11 +65,7 @@ export default async function AdminAnalyticsPage(props: PageProps<"/admin/analyt
 
   // Daily revenue, bucketed in memory — the dataset a single shop produces is
   // small enough that this is faster than a second round trip.
-  const buckets = new Map<string, number>();
-  for (let i = range.days - 1; i >= 0; i -= 1) {
-    const day = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-    buckets.set(day.toISOString().slice(0, 10), 0);
-  }
+  const buckets = new Map<string, number>(dayKeysBack(range.days).map((key) => [key, 0]));
   for (const order of orders) {
     const key = order.placedAt.toISOString().slice(0, 10);
     if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + order.total);
