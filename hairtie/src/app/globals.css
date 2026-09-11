@@ -243,3 +243,148 @@ h1, h2, h3, h4 {
 .ht-prose h2 { font-size: 1.5rem; margin: 2rem 0 0.75rem; }
 .ht-prose h3 { font-size: 1.2rem; margin: 1.5rem 0 0.5rem; }
 .ht-prose a { color: var(--ht-primary); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------------------------------------------------------------------------
+   Admin panel.
+
+   Deliberately independent of the storefront theme tokens — changing the shop's
+   colours in Appearance must never make the admin hard to read.
+--------------------------------------------------------------------------- */
+
+.adm {
+  --adm-bg: #f7f6f3;
+  --adm-surface: #ffffff;
+  --adm-line: #e7e3dc;
+  --adm-text: #2e2a26;
+  --adm-muted: #7d766e;
+  --adm-accent: #8d6a5b;
+  --adm-accent-soft: #f5ece7;
+  background: var(--adm-bg);
+  color: var(--adm-text);
+  font-family: var(--font-jost), system-ui, sans-serif;
+}
+
+.adm h1, .adm h2, .adm h3 {
+  font-family: var(--font-jost), system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.adm-card {
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: 14px;
+}
+
+.adm-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--adm-text);
+  margin-bottom: 0.35rem;
+}
+
+.adm-hint {
+  font-size: 0.75rem;
+  color: var(--adm-muted);
+  margin-top: 0.3rem;
+}
+
+.adm-input,
+.adm select,
+.adm textarea {
+  width: 100%;
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: 9px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.88rem;
+  color: var(--adm-text);
+  font-family: inherit;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.adm-input:focus,
+.adm select:focus,
+.adm textarea:focus {
+  outline: none;
+  border-color: var(--adm-accent);
+  box-shadow: 0 0 0 3px rgba(141, 106, 91, 0.13);
+}
+
+.adm-input::placeholder { color: #aca69d; }
+.adm-input:disabled { background: #f4f2ee; color: var(--adm-muted); }
+
+.adm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 9px;
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+  white-space: nowrap;
+}
+.adm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.adm-btn-primary { background: var(--adm-text); color: #fff; }
+.adm-btn-primary:not(:disabled):hover { background: var(--adm-accent); }
+
+.adm-btn-ghost { background: var(--adm-surface); border-color: var(--adm-line); color: var(--adm-text); }
+.adm-btn-ghost:not(:disabled):hover { background: #f2efea; }
+
+.adm-btn-danger { background: #fff; border-color: #e3c4c4; color: #9c3a3a; }
+.adm-btn-danger:not(:disabled):hover { background: #fbf2f2; }
+
+.adm-btn-sm { padding: 0.38rem 0.7rem; font-size: 0.78rem; }
+
+.adm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.adm-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.adm-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--adm-muted);
+  font-weight: 600;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--adm-line);
+  white-space: nowrap;
+}
+.adm-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #f0ede7;
+  vertical-align: middle;
+}
+.adm-table tbody tr:last-child td { border-bottom: 0; }
+.adm-table tbody tr:hover { background: #faf9f6; }
+
+.adm-scroll { overflow-x: auto; }
+
+/* The visual editor's section outline on hover */
+.adm-editable { position: relative; }
+.adm-editable::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  transition: border-color 130ms ease, background-color 130ms ease;
+}
+.adm-editable:hover::after { border-color: var(--adm-accent); background: rgba(141, 106, 91, 0.05); }

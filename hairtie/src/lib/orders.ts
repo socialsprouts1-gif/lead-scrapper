@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import type { OrderStatus } from "@/generated/prisma/enums";
+import { ORDER_STATUS_LABELS } from "@/lib/order-status";
 import { computeTotals, evaluateCoupon, lineMrp, linePrice, type CartWithItems } from "@/lib/cart";
 import { getSiteSettings } from "@/lib/settings";
 
@@ -217,35 +218,11 @@ export async function restoreStock(orderId: string, tx?: Prisma.TransactionClien
   }
 }
 
-export const ORDER_STATUS_FLOW: OrderStatus[] = [
-  "PENDING",
-  "CONFIRMED",
-  "PROCESSING",
-  "SHIPPED",
-  "DELIVERED",
-];
-
-export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  PENDING: "Pending",
-  CONFIRMED: "Confirmed",
-  PROCESSING: "Processing",
-  SHIPPED: "Shipped",
-  DELIVERED: "Delivered",
-  CANCELLED: "Cancelled",
-  RETURNED: "Returned",
-  REFUNDED: "Refunded",
-};
-
-export const ORDER_STATUS_TONE: Record<OrderStatus, { bg: string; color: string }> = {
-  PENDING: { bg: "#f3ece2", color: "#8a6b3c" },
-  CONFIRMED: { bg: "#e8f0ea", color: "#3f6b4c" },
-  PROCESSING: { bg: "#e9edf5", color: "#41567f" },
-  SHIPPED: { bg: "#e6eef4", color: "#356179" },
-  DELIVERED: { bg: "#e4f0e6", color: "#356b40" },
-  CANCELLED: { bg: "#f6e7e7", color: "#8a3c3c" },
-  RETURNED: { bg: "#f2ebf3", color: "#6b4079" },
-  REFUNDED: { bg: "#eeeae5", color: "#6b6058" },
-};
+export {
+  ORDER_STATUS_FLOW,
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_TONE,
+} from "@/lib/order-status";
 
 /** Records a status change and applies its side effects. */
 export async function changeOrderStatus(

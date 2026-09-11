@@ -68,7 +68,9 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
     .update({ where: { id: product.id }, data: { viewCount: { increment: 1 } } })
     .catch(() => {});
 
-  const related = await prisma.product.findMany({
+  // Related products: same category first, topped up with best sellers so the
+  // row is never left with an awkward gap.
+  const sameCategory = await prisma.product.findMany({
     where: {
       status: "ACTIVE",
       id: { not: product.id },
@@ -78,6 +80,22 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
     orderBy: { salesCount: "desc" },
     take: 4,
   });
+
+  const related =
+    sameCategory.length >= 4
+      ? sameCategory
+      : [
+          ...sameCategory,
+          ...(await prisma.product.findMany({
+            where: {
+              status: "ACTIVE",
+              id: { notIn: [product.id, ...sameCategory.map((item) => item.id)] },
+            },
+            select: PRODUCT_CARD_SELECT,
+            orderBy: { salesCount: "desc" },
+            take: 4 - sameCategory.length,
+          })),
+        ];
 
   const rating = averageRating(product);
   const totalStock = product.variants.length
