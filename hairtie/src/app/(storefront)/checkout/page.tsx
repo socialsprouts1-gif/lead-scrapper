@@ -3,8 +3,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { computeTotals, getCart, linePrice } from "@/lib/cart";
-import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
 import { razorpayConfigured } from "@/lib/razorpay";
 import { formatPaise } from "@/lib/money";
@@ -17,17 +15,12 @@ export const metadata: Metadata = {
 };
 
 export default async function CheckoutPage() {
-  const [cart, user, settings] = await Promise.all([getCart(), getCurrentUser(), getSiteSettings()]);
-  const lines = (cart?.items ?? []).filter((line) => !line.savedForLater);
+  const resolved = await getCart();
+  const settings = getSiteSettings();
+  const lines = (resolved?.lines ?? []).filter((line) => !line.item.savedForLater);
   if (lines.length === 0) redirect("/cart");
 
-  const totals = await computeTotals(cart, settings);
-  const address = user
-    ? await prisma.address.findFirst({
-        where: { userId: user.id },
-        orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
-      })
-    : null;
+  const totals = computeTotals(resolved, settings);
 
   return (
     <div className="ht-container py-10 md:py-14">
@@ -38,21 +31,10 @@ export default async function CheckoutPage() {
 
       <div className="grid gap-12 lg:grid-cols-[1fr_22rem] lg:gap-16">
         <CheckoutForm
-          signedIn={Boolean(user)}
           codEnabled={settings.shipping.codEnabled}
           onlineEnabled={settings.shipping.onlinePaymentEnabled}
           onlineConfigured={razorpayConfigured()}
           total={totals.total}
-          defaults={{
-            customerName: address?.fullName ?? user?.name ?? "",
-            customerEmail: user?.email ?? "",
-            customerPhone: address?.phone ?? user?.phone ?? "",
-            shippingLine1: address?.line1 ?? "",
-            shippingLine2: address?.line2 ?? "",
-            shippingCity: address?.city ?? "",
-            shippingState: address?.state ?? "",
-            shippingPincode: address?.pincode ?? "",
-          }}
         />
 
         <div className="space-y-5 lg:sticky lg:top-28 lg:self-start">
@@ -60,7 +42,7 @@ export default async function CheckoutPage() {
             <h2 className="text-xl">Your order</h2>
             <ul className="mt-4 space-y-4">
               {lines.map((line) => (
-                <li key={line.id} className="flex gap-3">
+                <li key={line.item.id} className="flex gap-3">
                   <div
                     className="relative h-16 w-14 shrink-0 overflow-hidden"
                     style={{ borderRadius: "calc(var(--ht-radius) * 0.5)", background: "var(--ht-bg)" }}
@@ -72,7 +54,7 @@ export default async function CheckoutPage() {
                       className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full text-[0.6rem]"
                       style={{ background: "var(--ht-text)", color: "var(--ht-bg)" }}
                     >
-                      {line.quantity}
+                      {line.item.quantity}
                     </span>
                   </div>
                   <div className="min-w-0 flex-1">
@@ -81,7 +63,7 @@ export default async function CheckoutPage() {
                       <p className="text-xs" style={{ color: "var(--ht-muted)" }}>{line.variant.name}</p>
                     )}
                   </div>
-                  <p className="text-sm">{formatPaise(linePrice(line) * line.quantity)}</p>
+                  <p className="text-sm">{formatPaise(linePrice(line) * line.item.quantity)}</p>
                 </li>
               ))}
             </ul>

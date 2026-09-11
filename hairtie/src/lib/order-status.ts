@@ -1,6 +1,6 @@
 /** Order status labels and colours — safe to import from client components. */
 
-import type { OrderStatus } from "@/generated/prisma/enums";
+import type { OrderStatus } from "@/lib/types";
 
 export const ORDER_STATUS_FLOW: OrderStatus[] = [
   "PENDING",

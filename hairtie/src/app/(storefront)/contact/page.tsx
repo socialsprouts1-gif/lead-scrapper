@@ -3,13 +3,14 @@ import { Clock, Mail, MapPin, Phone } from "lucide-react";
 import { getPublishedPage } from "@/lib/pages";
 import { getSiteSettings } from "@/lib/settings";
 import { buildMetadata, resolveSiteUrl } from "@/lib/seo";
-import { getWishlistIds } from "@/app/actions/wishlist";
+import { getWishlistIds } from "@/lib/wishlist";
 import { SectionList } from "@/components/sections/SectionRenderer";
 import { ContactForm } from "@/components/storefront/ContactForm";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getSiteSettings();
-  const [siteUrl, page] = await Promise.all([resolveSiteUrl(settings), getPublishedPage("contact")]);
+  const settings = getSiteSettings();
+  const page = getPublishedPage("contact");
+  const siteUrl = await resolveSiteUrl(settings);
   return buildMetadata({
     settings,
     siteUrl,
@@ -20,11 +21,9 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ContactPage() {
-  const [page, settings, wishlist] = await Promise.all([
-    getPublishedPage("contact"),
-    getSiteSettings(),
-    getWishlistIds(),
-  ]);
+  const page = getPublishedPage("contact");
+  const settings = getSiteSettings();
+  const wishlist = await getWishlistIds();
 
   return (
     <>

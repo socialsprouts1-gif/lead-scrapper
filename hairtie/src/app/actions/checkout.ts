@@ -1,8 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { mutate } from "@/lib/store";
 import { getCart } from "@/lib/cart";
 import { createOrderFromCart, findStockProblems } from "@/lib/orders";
 import { createRazorpayOrder, razorpayConfigured, razorpayKeyId } from "@/lib/razorpay";
@@ -22,7 +21,6 @@ const checkoutSchema = z.object({
   shippingPincode: z.string().trim().regex(/^\d{6}$/, "Please enter a valid 6-digit pincode."),
   customerNote: z.string().trim().max(500).optional().or(z.literal("")),
   paymentMethod: z.enum(["COD", "RAZORPAY"]),
-  saveAddress: z.boolean().optional(),
 });
 
 export type PlaceOrderResult =
@@ -51,9 +49,10 @@ export async function placeOrder(input: unknown): Promise<PlaceOrderResult> {
   }
 
   const details = parsed.data;
-  const [cart, user, settings] = await Promise.all([getCart(), getCurrentUser(), getSiteSettings()]);
+  const resolved = await getCart();
+  const settings = getSiteSettings();
 
-  if (!cart || cart.items.filter((line) => !line.savedForLater).length === 0) {
+  if (!resolved || resolved.lines.filter((line) => !line.item.savedForLater).length === 0) {
     return { ok: false, message: "Your bag is empty." };
   }
 
@@ -68,7 +67,7 @@ export async function placeOrder(input: unknown): Promise<PlaceOrderResult> {
     return { ok: false, message: "Cash on Delivery is currently switched off." };
   }
 
-  const problems = findStockProblems(cart);
+  const problems = findStockProblems(resolved);
   if (problems.length > 0) {
     const first = problems[0];
     return {
@@ -82,26 +81,9 @@ export async function placeOrder(input: unknown): Promise<PlaceOrderResult> {
 
   let order;
   try {
-    order = await createOrderFromCart(cart, details, user?.id ?? null);
+    order = createOrderFromCart(resolved, details);
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Could not place the order." };
-  }
-
-  if (user && details.saveAddress) {
-    await prisma.address
-      .create({
-        data: {
-          userId: user.id,
-          fullName: details.customerName,
-          phone: details.customerPhone,
-          line1: details.shippingLine1,
-          line2: details.shippingLine2 || null,
-          city: details.shippingCity,
-          state: details.shippingState,
-          pincode: details.shippingPincode,
-        },
-      })
-      .catch(() => {});
   }
 
   if (details.paymentMethod === "COD") {
@@ -114,9 +96,9 @@ export async function placeOrder(input: unknown): Promise<PlaceOrderResult> {
       receipt: order.orderNumber,
       notes: { orderNumber: order.orderNumber },
     });
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { razorpayOrderId: razorpayOrder.id },
+    mutate((data) => {
+      const stored = data.orders.find((entry) => entry.id === order.id);
+      if (stored) stored.razorpayOrderId = razorpayOrder.id;
     });
 
     return {
@@ -135,18 +117,17 @@ export async function placeOrder(input: unknown): Promise<PlaceOrderResult> {
     };
   } catch (error) {
     // The order exists but payment could not start — mark it so nobody ships it.
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: "FAILED",
-        events: {
-          create: {
-            status: "PENDING",
-            message: "Could not start the online payment. Customer was asked to retry.",
-            createdBy: "system",
-          },
-        },
-      },
+    mutate((data) => {
+      const stored = data.orders.find((entry) => entry.id === order.id);
+      if (!stored) return;
+      stored.paymentStatus = "FAILED";
+      stored.events.push({
+        id: `${stored.id}-failed`,
+        status: "PENDING",
+        message: "Could not start the online payment. Customer was asked to retry.",
+        createdBy: "system",
+        createdAt: new Date().toISOString(),
+      });
     });
     console.error("Razorpay order creation failed", error);
     return {

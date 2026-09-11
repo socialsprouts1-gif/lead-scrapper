@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { prisma } from "@/lib/db";
-import { PRODUCT_CARD_SELECT, averageRating } from "@/lib/catalog";
+import { mutate } from "@/lib/store";
+import { averageRating, allCategories, productBySlug, relatedProducts, stockOf } from "@/lib/catalog";
+import { approvedReviews } from "@/lib/reviews";
 import { getSiteSettings } from "@/lib/settings";
 import { buildMetadata, breadcrumbSchema, jsonLd, resolveSiteUrl } from "@/lib/seo";
 import { paiseToRupees, formatPaise } from "@/lib/money";
 import { productInquiryMessage, whatsappLink } from "@/lib/whatsapp";
-import { getWishlistIds } from "@/app/actions/wishlist";
+import { getWishlistIds } from "@/lib/wishlist";
 import { formatDate } from "@/lib/utils";
 import { ProductGallery } from "@/components/storefront/ProductGallery";
 import { ProductPurchase } from "@/components/storefront/ProductPurchase";
@@ -17,23 +18,34 @@ import { RecentlyViewed } from "@/components/storefront/RecentlyViewed";
 import { ProductGridBlock } from "@/components/sections/ProductRow";
 import { Stars } from "@/components/ui/Stars";
 
-async function loadProduct(slug: string) {
-  return prisma.product.findFirst({
-    where: { slug, status: { not: "DRAFT" } },
-    include: {
-      images: { orderBy: { position: "asc" } },
-      variants: { where: { isActive: true }, orderBy: { position: "asc" } },
-      attributes: { orderBy: { position: "asc" } },
-      category: { select: { name: true, slug: true, parent: { select: { name: true, slug: true } } } },
-      tags: { include: { tag: true } },
-      reviews: { where: { status: "APPROVED" }, orderBy: { createdAt: "desc" }, take: 12 },
-    },
-  });
+function loadProduct(slug: string) {
+  const product = productBySlug(slug);
+  if (!product || product.status === "DRAFT") return null;
+
+  const categories = allCategories();
+  const category = product.categoryId
+    ? (categories.find((entry) => entry.id === product.categoryId) ?? null)
+    : null;
+
+  return {
+    ...product,
+    variants: product.variants.filter((variant) => variant.isActive),
+    category: category
+      ? {
+          ...category,
+          parent: category.parentId
+            ? (categories.find((entry) => entry.id === category.parentId) ?? null)
+            : null,
+        }
+      : null,
+    reviews: approvedReviews(product.id).slice(0, 12),
+  };
 }
 
 export async function generateMetadata(props: PageProps<"/products/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;
-  const [product, settings] = await Promise.all([loadProduct(slug), getSiteSettings()]);
+  const product = loadProduct(slug);
+  const settings = getSiteSettings();
   if (!product) return {};
   const siteUrl = await resolveSiteUrl(settings);
   return buildMetadata({
@@ -52,60 +64,32 @@ export async function generateMetadata(props: PageProps<"/products/[slug]">): Pr
 
 export default async function ProductPage(props: PageProps<"/products/[slug]">) {
   const { slug } = await props.params;
-  const [product, settings, wishlist] = await Promise.all([
-    loadProduct(slug),
-    getSiteSettings(),
-    getWishlistIds(),
-  ]);
+  const product = loadProduct(slug);
+  const settings = getSiteSettings();
+  const wishlist = await getWishlistIds();
   if (!product || product.status === "ARCHIVED") notFound();
 
   const siteUrl = await resolveSiteUrl(settings);
   const url = `${siteUrl}/products/${product.slug}`;
 
-  // Fire-and-forget view counter — never blocks the render.
-  prisma.product
-    .update({ where: { id: product.id }, data: { viewCount: { increment: 1 } } })
-    .catch(() => {});
-
-  // Related products: same category first, topped up with best sellers so the
-  // row is never left with an awkward gap.
-  const sameCategory = await prisma.product.findMany({
-    where: {
-      status: "ACTIVE",
-      id: { not: product.id },
-      ...(product.categoryId ? { categoryId: product.categoryId } : {}),
-    },
-    select: PRODUCT_CARD_SELECT,
-    orderBy: { salesCount: "desc" },
-    take: 4,
+  // A simple popularity signal, used by the "Popular" sort order.
+  mutate((data) => {
+    const stored = data.products.find((entry) => entry.id === product.id);
+    if (stored) stored.viewCount += 1;
   });
 
-  const related =
-    sameCategory.length >= 4
-      ? sameCategory
-      : [
-          ...sameCategory,
-          ...(await prisma.product.findMany({
-            where: {
-              status: "ACTIVE",
-              id: { notIn: [product.id, ...sameCategory.map((item) => item.id)] },
-            },
-            select: PRODUCT_CARD_SELECT,
-            orderBy: { salesCount: "desc" },
-            take: 4 - sameCategory.length,
-          })),
-        ];
+  const related = relatedProducts(product, 4);
 
   const rating = averageRating(product);
-  const totalStock = product.variants.length
-    ? product.variants.reduce((sum, v) => sum + v.stock, 0)
-    : product.stock;
-  const inStock = !product.trackInventory || totalStock > 0;
+  const inStock = stockOf(product) > 0;
 
-  const specGroups = product.attributes.reduce<Record<string, typeof product.attributes>>((acc, attribute) => {
-    (acc[attribute.group] ||= []).push(attribute);
-    return acc;
-  }, {});
+  const specGroups = product.attributes.reduce<Record<string, typeof product.attributes>>(
+    (groups, attribute) => {
+      (groups[attribute.group] ||= []).push(attribute);
+      return groups;
+    },
+    {},
+  );
 
   const trail = [
     { name: "Home", path: "/" },
@@ -243,7 +227,7 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
                         {Object.keys(specGroups).length > 1 && <p className="ht-eyebrow mb-2">{group}</p>}
                         <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                           {attributes.map((attribute) => (
-                            <div key={attribute.id} className="flex justify-between gap-4 text-sm sm:block">
+                            <div key={attribute.name} className="flex justify-between gap-4 text-sm sm:block">
                               <dt style={{ color: "var(--ht-muted)" }}>{attribute.name}</dt>
                               <dd className="text-right sm:text-left">{attribute.value}</dd>
                             </div>
@@ -297,14 +281,14 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
 
             {product.tags.length > 0 && (
               <div className="mt-7 flex flex-wrap gap-2">
-                {product.tags.map(({ tag }) => (
+                {product.tags.map((tag) => (
                   <Link
-                    key={tag.id}
-                    href={`/shop?tag=${tag.slug}`}
+                    key={tag}
+                    href={`/shop?tag=${tag.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
                     className="rounded-full px-3 py-1.5 text-xs"
                     style={{ border: "1px solid var(--ht-border)", color: "var(--ht-muted)" }}
                   >
-                    {tag.name}
+                    {tag}
                   </Link>
                 ))}
               </div>

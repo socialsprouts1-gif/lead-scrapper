@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { mutate, store } from "@/lib/store";
+import { addOrderEvent } from "@/lib/orders";
 import { verifyRazorpayWebhook } from "@/lib/razorpay";
 
 /**
@@ -29,34 +30,27 @@ export async function POST(request: Request) {
   const razorpayOrderId = typeof payment?.order_id === "string" ? payment.order_id : null;
   if (!razorpayOrderId) return NextResponse.json({ ok: true });
 
-  const order = await prisma.order.findFirst({ where: { razorpayOrderId } });
+  const order = store().orders.find((entry) => entry.razorpayOrderId === razorpayOrderId);
   if (!order) return NextResponse.json({ ok: true });
 
   if (event.event === "payment.captured" && order.paymentStatus !== "PAID") {
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: "PAID",
-        status: order.status === "PENDING" ? "CONFIRMED" : order.status,
-        confirmedAt: order.confirmedAt ?? new Date(),
-        razorpayPaymentId: typeof payment?.id === "string" ? payment.id : order.razorpayPaymentId,
-        events: {
-          create: { status: "CONFIRMED", message: "Payment captured (webhook).", createdBy: "razorpay" },
-        },
-      },
+    mutate((db) => {
+      const stored = db.orders.find((entry) => entry.id === order.id);
+      if (!stored) return;
+      stored.paymentStatus = "PAID";
+      if (stored.status === "PENDING") stored.status = "CONFIRMED";
+      stored.confirmedAt = stored.confirmedAt ?? new Date().toISOString();
+      if (typeof payment?.id === "string") stored.razorpayPaymentId = payment.id;
     });
+    addOrderEvent(order.id, "CONFIRMED", "Payment captured (webhook).", "razorpay");
   }
 
   if (event.event === "payment.failed" && order.paymentStatus === "UNPAID") {
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: "FAILED",
-        events: {
-          create: { status: order.status, message: "Payment failed (webhook).", createdBy: "razorpay" },
-        },
-      },
+    mutate((db) => {
+      const stored = db.orders.find((entry) => entry.id === order.id);
+      if (stored) stored.paymentStatus = "FAILED";
     });
+    addOrderEvent(order.id, order.status, "Payment failed (webhook).", "razorpay");
   }
 
   return NextResponse.json({ ok: true });

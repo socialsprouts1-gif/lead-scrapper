@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { allOrders, customerSummaries } from "@/lib/orders";
+import { allCategories, productById } from "@/lib/catalog";
 import { getSiteSettings } from "@/lib/settings";
 import { formatPaise } from "@/lib/money";
 import { dayKeysBack, daysAgo } from "@/lib/dates";
@@ -14,65 +14,62 @@ const RANGES = [
 ];
 
 export default async function AdminAnalyticsPage(props: PageProps<"/admin/analytics">) {
-  await requireAdmin();
   const params = await props.searchParams;
   const days = Number(params.days ?? 30);
   const range = RANGES.find((entry) => entry.days === days) ?? RANGES[1];
   const since = daysAgo(range.days);
-  const settings = await getSiteSettings();
+  const settings = getSiteSettings();
 
-  const counted = { status: { notIn: ["CANCELLED" as const] }, placedAt: { gte: since } };
+  const everything = allOrders();
+  const counted = everything.filter(
+    (order) => order.status !== "CANCELLED" && new Date(order.placedAt) >= since,
+  );
 
-  const [totals, orders, topProducts, byCategory, byStatus, repeat] = await Promise.all([
-    prisma.order.aggregate({ where: counted, _sum: { total: true, discountAmount: true }, _count: true }),
-    prisma.order.findMany({
-      where: counted,
-      select: { placedAt: true, total: true },
-      orderBy: { placedAt: "asc" },
-    }),
-    prisma.orderItem.groupBy({
-      by: ["name"],
-      where: { order: counted },
-      _sum: { quantity: true, lineTotal: true },
-      orderBy: { _sum: { lineTotal: "desc" } },
-      take: 8,
-    }),
-    prisma.$queryRaw<{ name: string; revenue: bigint; units: bigint }[]>`
-      SELECT COALESCE(c.name, 'Uncategorised') AS name,
-             SUM(oi."lineTotal")::bigint AS revenue,
-             SUM(oi.quantity)::bigint AS units
-      FROM "OrderItem" oi
-      JOIN "Order" o ON o.id = oi."orderId"
-      LEFT JOIN "Product" p ON p.id = oi."productId"
-      LEFT JOIN "Category" c ON c.id = p."categoryId"
-      WHERE o.status <> 'CANCELLED' AND o."placedAt" >= ${since}
-      GROUP BY 1
-      ORDER BY revenue DESC
-      LIMIT 8`,
-    prisma.order.groupBy({ by: ["status"], where: { placedAt: { gte: since } }, _count: true }),
-    prisma.$queryRaw<{ repeat_customers: bigint }[]>`
-      SELECT COUNT(*)::bigint AS repeat_customers FROM (
-        SELECT "customerEmail" FROM "Order"
-        WHERE status <> 'CANCELLED'
-        GROUP BY "customerEmail"
-        HAVING COUNT(*) > 1
-      ) AS repeats`,
-  ]);
+  // Best sellers and category totals, rolled up from the order lines.
+  const byProduct = new Map<string, { name: string; units: number; revenue: number }>();
+  const byCategory = new Map<string, { name: string; units: number; revenue: number }>();
+  const categoryNames = new Map(allCategories().map((category) => [category.id, category.name]));
 
-  const revenue = totals._sum.total ?? 0;
-  const orderCount = totals._count;
+  for (const order of counted) {
+    for (const item of order.items) {
+      const product = byProduct.get(item.name) ?? { name: item.name, units: 0, revenue: 0 };
+      product.units += item.quantity;
+      product.revenue += item.lineTotal;
+      byProduct.set(item.name, product);
+
+      const categoryId = item.productId ? (productById(item.productId)?.categoryId ?? null) : null;
+      const label = categoryId ? (categoryNames.get(categoryId) ?? "Uncategorised") : "Uncategorised";
+      const category = byCategory.get(label) ?? { name: label, units: 0, revenue: 0 };
+      category.units += item.quantity;
+      category.revenue += item.lineTotal;
+      byCategory.set(label, category);
+    }
+  }
+
+  const topProducts = [...byProduct.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+  const categoryTotals = [...byCategory.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+
+  const statusCounts = new Map<string, number>();
+  for (const order of everything) {
+    if (new Date(order.placedAt) < since) continue;
+    statusCounts.set(order.status, (statusCounts.get(order.status) ?? 0) + 1);
+  }
+
+  const repeatCustomers = customerSummaries().filter((customer) => customer.orderCount > 1).length;
+
+  const revenue = counted.reduce((sum, order) => sum + order.total, 0);
+  const orderCount = counted.length;
   const average = orderCount > 0 ? Math.round(revenue / orderCount) : 0;
 
-  // Daily revenue, bucketed in memory — the dataset a single shop produces is
-  // small enough that this is faster than a second round trip.
+  // Revenue per day, bucketed by ISO date.
   const buckets = new Map<string, number>(dayKeysBack(range.days).map((key) => [key, 0]));
-  for (const order of orders) {
-    const key = order.placedAt.toISOString().slice(0, 10);
+  for (const order of counted) {
+    const key = order.placedAt.slice(0, 10);
     if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + order.total);
   }
   const series = [...buckets.entries()];
   const peak = Math.max(...series.map(([, value]) => value), 1);
-  const maxCategoryRevenue = Math.max(...byCategory.map((row) => Number(row.revenue)), 1);
+  const maxCategoryRevenue = Math.max(...categoryTotals.map((row) => row.revenue), 1);
 
   return (
     <AdminPage>
@@ -101,7 +98,7 @@ export default async function AdminAnalyticsPage(props: PageProps<"/admin/analyt
         <StatCard label="Average order" value={orderCount ? formatPaise(average) : "—"} />
         <StatCard
           label="Repeat customers"
-          value={String(Number(repeat[0]?.repeat_customers ?? 0))}
+          value={String(repeatCustomers)}
           hint="All time"
         />
       </div>
@@ -149,8 +146,8 @@ export default async function AdminAnalyticsPage(props: PageProps<"/admin/analyt
                   {topProducts.map((row) => (
                     <tr key={row.name}>
                       <td className="max-w-[16rem] truncate">{row.name}</td>
-                      <td>{row._sum.quantity ?? 0}</td>
-                      <td>{formatPaise(row._sum.lineTotal ?? 0)}</td>
+                      <td>{row.units}</td>
+                      <td>{formatPaise(row.revenue)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -160,21 +157,18 @@ export default async function AdminAnalyticsPage(props: PageProps<"/admin/analyt
             <div className="adm-card p-5">
               <h2 className="mb-4 text-base">Sales by category</h2>
               <ul className="space-y-3">
-                {byCategory.map((row) => (
+                {categoryTotals.map((row) => (
                   <li key={row.name}>
                     <div className="flex justify-between text-sm">
                       <span>{row.name}</span>
                       <span style={{ color: "var(--adm-muted)" }}>
-                        {formatPaise(Number(row.revenue))} · {Number(row.units)} units
+                        {formatPaise(row.revenue)} · {row.units} units
                       </span>
                     </div>
                     <div className="mt-1.5 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--adm-bg)" }}>
                       <div
                         className="h-full rounded-full"
-                        style={{
-                          width: `${(Number(row.revenue) / maxCategoryRevenue) * 100}%`,
-                          background: "var(--adm-accent)",
-                        }}
+                        style={{ width: `${(row.revenue / maxCategoryRevenue) * 100}%`, background: "var(--adm-accent)" }}
                       />
                     </div>
                   </li>
@@ -186,11 +180,11 @@ export default async function AdminAnalyticsPage(props: PageProps<"/admin/analyt
           <div className="adm-card mt-5 p-5">
             <h2 className="mb-4 text-base">Orders by status</h2>
             <div className="flex flex-wrap gap-3">
-              {byStatus.map((row) => (
-                <div key={row.status} className="rounded-lg px-4 py-3" style={{ background: "var(--adm-bg)" }}>
-                  <p className="text-lg font-medium">{row._count}</p>
+              {[...statusCounts.entries()].map(([status, count]) => (
+                <div key={status} className="rounded-lg px-4 py-3" style={{ background: "var(--adm-bg)" }}>
+                  <p className="text-lg font-medium">{count}</p>
                   <p className="text-xs capitalize" style={{ color: "var(--adm-muted)" }}>
-                    {row.status.toLowerCase()}
+                    {status.toLowerCase()}
                   </p>
                 </div>
               ))}

@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { prisma } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
 import { buildMetadata, resolveSiteUrl } from "@/lib/seo";
 import { formatDate } from "@/lib/utils";
 import { formatPaise } from "@/lib/money";
-import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/orders";
+import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE, orderByNumber } from "@/lib/orders";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getSiteSettings();
+  const settings = getSiteSettings();
   const siteUrl = await resolveSiteUrl(settings);
   return buildMetadata({
     settings,
@@ -30,12 +29,9 @@ export default async function TrackOrderPage(props: PageProps<"/track-order">) {
   if (orderNumber && phone) {
     // Both the order number and the phone must match, so a leaked order number
     // alone does not expose a customer's address here.
-    const found = await prisma.order.findUnique({
-      where: { orderNumber },
-      include: { items: true, events: { orderBy: { createdAt: "desc" } } },
-    });
+    const found = orderByNumber(orderNumber);
     if (found && found.customerPhone.replace(/\D/g, "").endsWith(phone)) {
-      order = found;
+      order = { ...found, events: [...found.events].reverse() };
     } else {
       error = "We couldn't find an order with those details. Please check and try again.";
     }

@@ -3,8 +3,14 @@
 This is the guide for running the Hairtie website yourself. No code, no jargon.
 If you can use Instagram, you can use this.
 
-Your admin panel lives at **`yourwebsite.com/admin`**. Sign in with the email and
-password you were given, and change that password the first time you sign in.
+Your admin panel lives at **`yourwebsite.com/admin`**. There is no password — it
+opens straight away.
+
+> **One thing to know before you put the site online:** because there is no
+> password, anyone who types `/admin` after your web address can change your
+> products and read your orders. On your own computer that is fine. Before the
+> site goes live on the internet, ask your developer to switch the password back
+> on, or to put the whole site behind your hosting provider's password.
 
 ---
 
@@ -94,6 +100,9 @@ it on the order so your records match.
 
 **Messaging a customer:** the *Message customer* button opens WhatsApp with their
 number already filled in.
+
+**Customers** builds itself from your orders — there are no accounts to manage.
+Each person appears once, with everything they have bought.
 
 ---
 
@@ -200,11 +209,16 @@ store details, WhatsApp number, colours and fonts, and basic SEO.
 
 ### These need a developer (one-off work, only if you want them)
 
+- **Putting a password on the admin panel** before the site goes public. Do this
+  one first.
 - Selling on Amazon, Flipkart or Myntra. Your product data is already stored in
   the shape those marketplaces need — the connection itself has to be built.
   **Nothing on this site currently sends anything to a marketplace.**
 - Automatic order emails and SMS (right now you contact customers on WhatsApp).
+- Customer accounts, if you ever want shoppers to sign in and see past orders.
 - A courier integration that creates shipping labels for you.
+- Moving to a proper database, if the shop grows past a few thousand products or
+  several people need to edit it at the same time.
 - Loyalty points, gift cards, subscriptions, multi-language, multi-currency.
 - New kinds of page sections beyond the eighteen that ship with the site.
 
@@ -213,9 +227,8 @@ store details, WhatsApp number, colours and fonts, and basic SEO.
 | What | Roughly | Notes |
 | --- | --- | --- |
 | Domain name | ₹800–1,500 a year | e.g. hairtie.in |
-| Hosting | Free to start (Vercel); a few hundred rupees a month as traffic grows | |
-| Database | Free to start (Supabase/Neon); paid tiers as the catalogue grows | |
-| Image storage | Usually inside the database plan's free tier | |
+| Hosting | A small server is enough — a few hundred rupees a month | Your shop keeps its data in a file on that server |
+| Database | ₹0 | There isn't one. |
 | Razorpay | ~2% per online transaction, no monthly fee | Only on money you actually receive |
 | Google Analytics | Free | Optional |
 
@@ -231,14 +244,26 @@ store details, WhatsApp number, colours and fonts, and basic SEO.
   its usage limit, and that the order meets the minimum.
 - **Online payment isn't offered at checkout** — your Razorpay keys need to be
   added by your developer once. Until then Cash on Delivery works normally.
-- **Photos disappeared after a redeploy** — your site is on Vercel with the local
-  storage setting. Your developer needs to switch it to Supabase storage once.
+- **Everything went back to the demo products** — your site is running somewhere
+  that cannot save files (Vercel and similar). Your shop needs to be on a normal
+  server, or your developer needs to connect proper storage.
 
 ---
 
-## 12. Before you go live
+## 12. Backing up your shop
 
-- [ ] Change the admin password.
+Your entire shop — products, orders, page layouts, settings — is one file on the
+server: **`.data/hairtie.json`**. Your photos are in **`public/uploads/`**.
+
+Copy those two things somewhere safe now and then, and you have a complete
+backup. If anything ever goes wrong, putting that file back restores the shop
+exactly as it was.
+
+---
+
+## 13. Before you go live
+
+- [ ] Ask your developer to put a password on `/admin`.
 - [ ] Replace the demo products with real ones (or delete them).
 - [ ] Replace the demo photos everywhere — homepage banner, categories, store photo.
 - [ ] Put the real address, hours, phone and WhatsApp number in Store Settings.
@@ -246,3 +271,4 @@ store details, WhatsApp number, colours and fonts, and basic SEO.
 - [ ] Set your website address in Store Settings → SEO.
 - [ ] Place one real test order and walk it through to *Delivered*.
 - [ ] Check the site on your own phone.
+- [ ] Take your first backup of `.data/hairtie.json`.

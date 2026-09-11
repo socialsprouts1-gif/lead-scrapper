@@ -2,36 +2,34 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { prisma } from "@/lib/db";
-import { getShopFacets, searchProducts } from "@/lib/catalog";
+import { allCategories, categoryBySlug, getShopFacets, searchProducts } from "@/lib/catalog";
 import { getSiteSettings } from "@/lib/settings";
 import { buildMetadata, breadcrumbSchema, jsonLd, resolveSiteUrl } from "@/lib/seo";
-import { getWishlistIds } from "@/app/actions/wishlist";
+import { getWishlistIds } from "@/lib/wishlist";
 import { ShopFilters } from "@/components/storefront/ShopFilters";
 import { ProductGridBlock } from "@/components/sections/ProductRow";
 
-export async function generateStaticParams() {
-  try {
-    const categories = await prisma.category.findMany({ where: { isActive: true }, select: { slug: true } });
-    return categories.map((category) => ({ slug: category.slug }));
-  } catch {
-    return [];
-  }
+export function generateStaticParams() {
+  return allCategories()
+    .filter((category) => category.isActive)
+    .map((category) => ({ slug: category.slug }));
 }
 
-async function loadCategory(slug: string) {
-  return prisma.category.findUnique({
-    where: { slug },
-    include: {
-      parent: { select: { name: true, slug: true } },
-      children: { where: { isActive: true }, orderBy: [{ position: "asc" }], select: { name: true, slug: true } },
-    },
-  });
+function loadCategory(slug: string) {
+  const category = categoryBySlug(slug);
+  if (!category) return null;
+  const all = allCategories();
+  return {
+    ...category,
+    parent: category.parentId ? (all.find((entry) => entry.id === category.parentId) ?? null) : null,
+    children: all.filter((child) => child.parentId === category.id && child.isActive),
+  };
 }
 
 export async function generateMetadata(props: PageProps<"/categories/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;
-  const [category, settings] = await Promise.all([loadCategory(slug), getSiteSettings()]);
+  const category = loadCategory(slug);
+  const settings = getSiteSettings();
   if (!category) return {};
   const siteUrl = await resolveSiteUrl(settings);
   return buildMetadata({
@@ -55,24 +53,23 @@ function many(value: string | string[] | undefined) {
 export default async function CategoryPage(props: PageProps<"/categories/[slug]">) {
   const { slug } = await props.params;
   const params = await props.searchParams;
-  const [category, settings] = await Promise.all([loadCategory(slug), getSiteSettings()]);
+  const category = loadCategory(slug);
+  const settings = getSiteSettings();
   if (!category || !category.isActive) notFound();
 
   const page = Number(first(params.page) ?? 1);
-  const [{ products, total, pageCount }, facets, wishlist, siteUrl] = await Promise.all([
-    searchProducts({
-      category: slug,
-      sort: first(params.sort) ?? "newest",
-      colors: many(params.color),
-      tags: many(params.tag),
-      maxPrice: first(params.maxPrice) ? Number(first(params.maxPrice)) : undefined,
-      availability: first(params.availability) === "in-stock" ? ("in-stock" as const) : undefined,
-      page,
-    }),
-    getShopFacets(),
-    getWishlistIds(),
-    resolveSiteUrl(settings),
-  ]);
+  const { products, total, pageCount } = searchProducts({
+    category: slug,
+    sort: first(params.sort) ?? "newest",
+    colors: many(params.color),
+    tags: many(params.tag),
+    maxPrice: first(params.maxPrice) ? Number(first(params.maxPrice)) : undefined,
+    availability: first(params.availability) === "in-stock" ? ("in-stock" as const) : undefined,
+    page,
+  });
+  const facets = getShopFacets();
+  const wishlist = await getWishlistIds();
+  const siteUrl = await resolveSiteUrl(settings);
 
   const trail = [
     { name: "Home", path: "/" },

@@ -1,22 +1,27 @@
 /**
- * Seeds the store with a realistic demo catalogue, the default homepage layout
- * and the content pages. Everything here is meant to be replaced by real
- * Hairtie products and photos from the admin panel.
+ * The demo shop.
  *
- * Run with:  npm run db:seed
+ * This is the content the store starts with so it looks finished from the first
+ * page load — 34 products across 12 categories, the homepage layout, the policy
+ * pages and a few reviews. All of it is meant to be replaced from the admin
+ * panel; see HANDOVER.md.
  */
-import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import bcrypt from "bcryptjs";
-import { PrismaClient, type Prisma } from "../src/generated/prisma/client";
-import { DEFAULT_SITE_SETTINGS, DEFAULT_THEME } from "../src/lib/settings";
-import { SECTION_MAP } from "../src/lib/sections";
 
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
-});
+import { SECTION_MAP } from "@/lib/sections";
+import type {
+  Category, Coupon, Look, MediaAsset, Page, Product, ProductVariant, Review, Section,
+} from "@/lib/types";
 
 const rupees = (n: number) => n * 100;
+
+/** Deterministic ids, so a re-seed produces the same shop. */
+function id(prefix: string, key: string) {
+  return `${prefix}_${key.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+}
+
+function slugify(input: string) {
+  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
 
 /* -------------------------------------------------------------------------- */
 /* Categories                                                                 */
@@ -612,7 +617,7 @@ const PRODUCTS: ProductSeed[] = [
 ];
 
 /* -------------------------------------------------------------------------- */
-/* Homepage & content pages                                                   */
+/* Pages                                                                      */
 /* -------------------------------------------------------------------------- */
 
 function section(type: string, overrides: Record<string, unknown> = {}) {
@@ -798,334 +803,316 @@ const CONTENT_PAGES: {
 ];
 
 /* -------------------------------------------------------------------------- */
-/* Seed                                                                       */
+/* Reviews, looks and coupons                                                 */
 /* -------------------------------------------------------------------------- */
 
-async function main() {
-  console.log("Seeding Hairtie…");
+const REVIEWS = [
+  ["marble-swirl-claw-clip", "Ananya R.", 5, "Finally a clip that holds", "I have very thick hair and most clips give up by lunch. This one doesn't. Bought a second in mocha."],
+  ["marble-swirl-claw-clip", "Divya S.", 4, "Pretty and sturdy", "Lovely finish. Slightly bigger than I expected but that's why it holds so well."],
+  ["mulberry-satin-scrunchie", "Meher K.", 5, "No more morning dents", "Sleeping in these has genuinely made a difference to my hair in the morning."],
+  ["isla-quilted-sling", "Sneha D.", 5, "Looks far more expensive", "Carried it to a wedding and three people asked where it was from. The chain strap is comfortable."],
+  ["noor-canvas-tote", "Priya M.", 5, "Perfect work bag", "Laptop, lunch box, water bottle — all of it fits and the bag still stands up on its own."],
+  ["oversized-satin-bow-clip", "Riya T.", 5, "Exactly as pictured", "The bow actually stays open and doesn't flop. Wore it to a mehendi."],
+  ["knotted-headband-blush", "Kavya N.", 4, "Comfortable for hours", "No headache after a full day, which was my main worry."],
+  ["mira-shoulder-bag", "Ishita B.", 5, "The shape is perfect", "Sits right under the arm. Soft leather feel, and the zip is good quality."],
+] as const;
 
-  // --- settings ------------------------------------------------------------
-  await prisma.siteSetting.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", data: DEFAULT_SITE_SETTINGS },
-    update: {},
-  });
-  await prisma.themeSetting.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", data: DEFAULT_THEME },
-    update: {},
-  });
+const LOOKS = [
+  { title: "The Everyday Edit", subtitle: "Clip, sling, done.", image: "/images/lifestyle/lifestyle-1.webp", products: ["marble-swirl-claw-clip", "isla-quilted-sling", "mulberry-satin-scrunchie"] },
+  { title: "Work Mornings", subtitle: "Room for everything.", image: "/images/lifestyle/lifestyle-2.webp", products: ["noor-canvas-tote", "gold-tone-snap-clips-set-of-6", "mini-coin-purse"] },
+  { title: "Wedding Season", subtitle: "Dressed up, still comfortable.", image: "/images/lifestyle/lifestyle-3.webp", products: ["pearl-handle-clutch", "pearl-studded-hairband", "oversized-satin-bow-clip"] },
+];
 
-  // --- admin account -------------------------------------------------------
-  const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? "admin@hairtie.in").toLowerCase();
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "hairtie1234";
-  await prisma.user.upsert({
-    where: { email: adminEmail },
-    create: {
-      email: adminEmail,
-      name: "Hairtie Admin",
-      passwordHash: await bcrypt.hash(adminPassword, 12),
-      role: "ADMIN",
-    },
-    update: { role: "ADMIN" },
-  });
-  console.log(`  admin: ${adminEmail}`);
+const COUPONS = [
+  { code: "WELCOME10", description: "10% off your first order", type: "PERCENT" as const, value: 10, maxDiscount: rupees(200), firstOrderOnly: true },
+  { code: "HAIRTIE199", description: "₹199 off orders above ₹1499", type: "FIXED" as const, value: rupees(199), minOrderValue: rupees(1499) },
+  { code: "BAGS15", description: "15% off all handbags", type: "PERCENT" as const, value: 15, maxDiscount: rupees(500), scope: "CATEGORIES" as const },
+];
 
-  // --- categories ----------------------------------------------------------
-  const categoryIds = new Map<string, string>();
-  let position = 0;
-  for (const parent of CATEGORIES) {
-    const created = await prisma.category.upsert({
-      where: { slug: parent.slug },
-      create: {
-        name: parent.name,
-        slug: parent.slug,
-        description: parent.description,
-        imageUrl: `/images/categories/${parent.art}.svg`,
-        imageAlt: `${parent.name} at Hairtie`,
-        isFeatured: parent.featured ?? false,
-        position: position++,
-        seoTitle: `${parent.name} — Buy Online at Hairtie`,
-        seoDescription: parent.description,
-      },
-      update: {},
-    });
-    categoryIds.set(parent.slug, created.id);
+/* -------------------------------------------------------------------------- */
+/* Building the shop                                                          */
+/* -------------------------------------------------------------------------- */
 
-    for (const child of parent.children ?? []) {
-      const sub = await prisma.category.upsert({
-        where: { slug: child.slug },
-        create: {
-          name: child.name,
-          slug: child.slug,
-          description: child.description,
-          imageUrl: `/images/categories/${child.art}.svg`,
-          imageAlt: `${child.name} at Hairtie`,
-          isFeatured: child.featured ?? false,
-          parentId: created.id,
-          position: position++,
-          seoTitle: `${child.name} — Buy Online at Hairtie`,
-          seoDescription: child.description,
-        },
-        update: {},
-      });
-      categoryIds.set(child.slug, sub.id);
-    }
-  }
-  console.log(`  categories: ${categoryIds.size}`);
+export type SeedData = {
+  products: Product[];
+  categories: Category[];
+  pages: Page[];
+  reviews: Review[];
+  coupons: Coupon[];
+  looks: Look[];
+  media: MediaAsset[];
+  orders: [];
+  carts: [];
+  newsletter: [];
+};
 
-  // --- tags ----------------------------------------------------------------
-  const tagNames = [...new Set(PRODUCTS.flatMap((p) => p.tags))];
-  const tagIds = new Map<string, string>();
-  for (const name of tagNames) {
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const tag = await prisma.tag.upsert({
-      where: { slug },
-      create: { name: name.replace(/(^|\s)\S/g, (c) => c.toUpperCase()), slug },
-      update: {},
-    });
-    tagIds.set(name, tag.id);
-  }
+const BAG_CATEGORIES = ["sling-bags", "shoulder-bags", "tote-bags", "clutches"];
 
-  // --- products ------------------------------------------------------------
-  let index = 0;
-  const productIds = new Map<string, string>();
-  for (const seed of PRODUCTS) {
-    const slug = seed.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    const sku = `HT-${seed.category.slice(0, 3).toUpperCase()}-${String(index + 1).padStart(3, "0")}`;
-    const isBag = ["sling-bags", "shoulder-bags", "tote-bags", "clutches"].includes(seed.category);
-    const tone = (index % 3) + 1;
+/** Fixed origin so demo timestamps are stable across re-seeds. */
+const SEED_EPOCH = Date.UTC(2026, 0, 15);
 
-    const existing = await prisma.product.findUnique({ where: { slug } });
-    if (existing) {
-      productIds.set(slug, existing.id);
-      index += 1;
-      continue;
-    }
-
-    const product = await prisma.product.create({
-      data: {
-        name: seed.name,
-        slug,
-        sku,
-        categoryId: categoryIds.get(seed.category) ?? null,
-        shortDescription: seed.short,
-        description: seed.description,
-        price: rupees(seed.price),
-        mrp: rupees(seed.mrp),
-        stock: seed.stock ?? 25,
-        lowStockThreshold: isBag ? 4 : 10,
-        material: seed.material,
-        careInstructions: isBag ? BAG_CARE : HAIR_CARE,
-        weightGrams: seed.weight ?? 50,
-        lengthCm: seed.dims?.[0] ?? null,
-        widthCm: seed.dims?.[1] ?? null,
-        heightCm: seed.dims?.[2] ?? null,
-        hsnCode: isBag ? "4202" : "9615",
-        gstRate: isBag ? 18 : 5,
-        publishedAt: new Date(Date.now() - index * 36 * 60 * 60 * 1000),
-        position: index,
-        seoTitle: `${seed.name} — Buy Online | Hairtie`,
-        seoDescription: seed.short,
-        seoKeywords: seed.tags.join(", "),
-        salesCount: Math.max(0, 90 - index * 3 + (seed.flags?.isBestseller ? 120 : 0)),
-        viewCount: 400 - index * 7 + (seed.flags?.isTrending ? 700 : 0),
-        ...seed.flags,
-        images: {
-          create: [1, 2, 3].map((angle) => ({
-            url: `/images/products/${seed.art}-${tone}-${angle}.svg`,
-            alt: `${seed.name} — view ${angle}`,
-            position: angle - 1,
-            width: 800,
-            height: 1000,
-          })),
-        },
-        attributes: {
-          create: [
-            { name: "Material", value: seed.material, group: "Specifications", position: 0 },
-            ...seed.attributes.map(([name, value], i) => ({
-              name,
-              value,
-              group: "Specifications",
-              position: i + 1,
-            })),
-            ...(seed.dims
-              ? [
-                  { name: "Length", value: `${seed.dims[0]} cm`, group: "Dimensions", position: 0 },
-                  { name: "Width", value: `${seed.dims[1]} cm`, group: "Dimensions", position: 1 },
-                  { name: "Height", value: `${seed.dims[2]} cm`, group: "Dimensions", position: 2 },
-                ]
-              : []),
-          ],
-        },
-        variants: {
-          create: seed.colors.map(([color, hex], i) => ({
-            name: color,
-            sku: `${sku}-${color.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, "")}${i}`,
-            color,
-            colorHex: hex,
-            stock: Math.max(2, Math.round((seed.stock ?? 25) / seed.colors.length)),
-            position: i,
-          })),
-        },
-        tags: {
-          create: seed.tags.map((t) => ({ tagId: tagIds.get(t)! })),
-        },
-      },
-    });
-    productIds.set(slug, product.id);
-    index += 1;
-  }
-  console.log(`  products: ${productIds.size}`);
-
-  // --- reviews -------------------------------------------------------------
-  const REVIEWS = [
-    ["marble-swirl-claw-clip", "Ananya R.", 5, "Finally a clip that holds", "I have very thick hair and most clips give up by lunch. This one doesn't. Bought a second in mocha."],
-    ["marble-swirl-claw-clip", "Divya S.", 4, "Pretty and sturdy", "Lovely finish. Slightly bigger than I expected but that's why it holds so well."],
-    ["mulberry-satin-scrunchie", "Meher K.", 5, "No more morning dents", "Sleeping in these has genuinely made a difference to my hair in the morning."],
-    ["isla-quilted-sling", "Sneha D.", 5, "Looks far more expensive", "Carried it to a wedding and three people asked where it was from. The chain strap is comfortable."],
-    ["noor-canvas-tote", "Priya M.", 5, "Perfect work bag", "Laptop, lunch box, water bottle — all of it fits and the bag still stands up on its own."],
-    ["oversized-satin-bow-clip", "Riya T.", 5, "Exactly as pictured", "The bow actually stays open and doesn't flop. Wore it to a mehendi."],
-    ["knotted-headband-blush", "Kavya N.", 4, "Comfortable for hours", "No headache after a full day, which was my main worry."],
-    ["mira-shoulder-bag", "Ishita B.", 5, "The shape is perfect", "Sits right under the arm. Soft leather feel, and the zip is good quality."],
-  ] as const;
-
-  for (const [slug, name, rating, title, body] of REVIEWS) {
-    const productId = productIds.get(slug);
-    if (!productId) continue;
-    const already = await prisma.review.findFirst({ where: { productId, authorName: name } });
-    if (already) continue;
-    await prisma.review.create({
-      data: { productId, authorName: name, rating, title, body, status: "APPROVED", isVerified: true },
-    });
-    await prisma.product.update({
-      where: { id: productId },
-      data: { ratingSum: { increment: rating }, reviewCount: { increment: 1 } },
-    });
-  }
-
-  // --- shop the look -------------------------------------------------------
-  const LOOKS = [
-    { title: "The Everyday Edit", subtitle: "Clip, sling, done.", image: "/images/lifestyle/lifestyle-1.webp", products: ["marble-swirl-claw-clip", "isla-quilted-sling", "mulberry-satin-scrunchie"] },
-    { title: "Work Mornings", subtitle: "Room for everything.", image: "/images/lifestyle/lifestyle-2.webp", products: ["noor-canvas-tote", "gold-tone-snap-clips-set-of-6", "mini-coin-purse"] },
-    { title: "Wedding Season", subtitle: "Dressed up, still comfortable.", image: "/images/lifestyle/lifestyle-3.webp", products: ["pearl-handle-clutch", "pearl-studded-hairband", "oversized-satin-bow-clip"] },
-  ];
-  if ((await prisma.look.count()) === 0) {
-    let lookPosition = 0;
-    for (const look of LOOKS) {
-      await prisma.look.create({
-        data: {
-          title: look.title,
-          subtitle: look.subtitle,
-          imageUrl: look.image,
-          imageAlt: `${look.title} — styled by Hairtie`,
-          position: lookPosition++,
-          products: {
-            create: look.products
-              .map((slug, i) => ({ productId: productIds.get(slug), position: i }))
-              .filter((p): p is { productId: string; position: number } => Boolean(p.productId)),
-          },
-        },
-      });
-    }
-  }
-
-  // --- coupons -------------------------------------------------------------
-  const COUPONS = [
-    { code: "WELCOME10", description: "10% off your first order", type: "PERCENT" as const, value: 10, maxDiscount: rupees(200), firstOrderOnly: true },
-    { code: "HAIRTIE199", description: "₹199 off orders above ₹1499", type: "FIXED" as const, value: rupees(199), minOrderValue: rupees(1499) },
-    { code: "BAGS15", description: "15% off all handbags", type: "PERCENT" as const, value: 15, maxDiscount: rupees(500), scope: "CATEGORIES" as const },
-  ];
-  for (const coupon of COUPONS) {
-    const categoryIdsForCoupon =
-      coupon.scope === "CATEGORIES"
-        ? ["handbags", "sling-bags", "shoulder-bags", "tote-bags", "clutches"]
-            .map((s) => categoryIds.get(s))
-            .filter((v): v is string => Boolean(v))
-        : [];
-    await prisma.coupon.upsert({
-      where: { code: coupon.code },
-      create: {
-        code: coupon.code,
-        description: coupon.description,
-        type: coupon.type,
-        value: coupon.value,
-        maxDiscount: coupon.maxDiscount ?? null,
-        minOrderValue: coupon.minOrderValue ?? 0,
-        firstOrderOnly: coupon.firstOrderOnly ?? false,
-        scope: coupon.scope ?? "ALL",
-        categoryIds: categoryIdsForCoupon,
-      },
-      update: {},
-    });
-  }
-
-  // --- pages ---------------------------------------------------------------
-  async function createPage(
-    slug: string,
-    title: string,
-    sections: ReturnType<typeof section>[],
-    seo?: { seoTitle?: string; seoDescription?: string },
-  ) {
-    const existing = await prisma.page.findUnique({ where: { slug } });
-    if (existing) return;
-    await prisma.page.create({
-      data: {
-        slug,
-        title,
-        isSystem: true,
-        seoTitle: seo?.seoTitle ?? title,
-        seoDescription: seo?.seoDescription ?? "",
-        publishedSnapshot: sections.map((s, i) => ({ ...s, position: i, isHidden: false })) as unknown as Prisma.InputJsonValue,
-        sections: {
-          create: sections.map((s, i) => ({
-            type: s.type,
-            settings: s.settings as Prisma.InputJsonObject,
-            position: i,
-          })),
-        },
-      },
-    });
-  }
-
-  await createPage("home", "Home", HOME_SECTIONS, {
-    seoTitle: DEFAULT_SITE_SETTINGS.seo.siteTitle,
-    seoDescription: DEFAULT_SITE_SETTINGS.seo.description,
-  });
-  for (const page of CONTENT_PAGES) {
-    await createPage(page.slug, page.title, page.sections, {
-      seoTitle: page.seoTitle,
-      seoDescription: page.seoDescription,
-    });
-  }
-  console.log(`  pages: ${1 + CONTENT_PAGES.length}`);
-
-  // --- media library -------------------------------------------------------
-  if ((await prisma.mediaAsset.count()) === 0) {
-    const demoMedia = [
-      ...["hero/hero-main", "hero/hero-mobile"].map((p) => ({ path: p, folder: "Banners" })),
-      ...["banners/promo-wide", "banners/promo-secondary"].map((p) => ({ path: p, folder: "Banners" })),
-      ...["lifestyle/lifestyle-1", "lifestyle/lifestyle-2", "lifestyle/lifestyle-3"].map((p) => ({ path: p, folder: "Lifestyle" })),
-      ...["store/hairtie-store", "about/about-story"].map((p) => ({ path: p, folder: "Store" })),
-      ...[1, 2, 3, 4, 5, 6].map((n) => ({ path: `instagram/ig-${n}`, folder: "Instagram" })),
-    ];
-    await prisma.mediaAsset.createMany({
-      data: demoMedia.map((m) => ({
-        url: `/images/${m.path}.svg`,
-        filename: `${m.path.split("/").pop()}.svg`,
-        mimeType: "image/svg+xml",
-        folder: m.folder,
-        alt: "Hairtie demo image",
-      })),
-    });
-  }
-
-  console.log("Done.");
+function isoDaysBefore(days: number) {
+  return new Date(SEED_EPOCH - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+export function buildSeed(): SeedData {
+  const categories: Category[] = [];
+  let position = 0;
+
+  for (const parent of CATEGORIES) {
+    const parentId = id("cat", parent.slug);
+    categories.push({
+      id: parentId,
+      name: parent.name,
+      slug: parent.slug,
+      description: parent.description,
+      imageUrl: `/images/categories/${parent.art}.webp`,
+      imageAlt: `${parent.name} at Hairtie`,
+      parentId: null,
+      position: position++,
+      isFeatured: parent.featured ?? false,
+      isActive: true,
+      seoTitle: `${parent.name} — Buy Online at Hairtie`,
+      seoDescription: parent.description,
+    });
+
+    for (const child of parent.children ?? []) {
+      categories.push({
+        id: id("cat", child.slug),
+        name: child.name,
+        slug: child.slug,
+        description: child.description,
+        imageUrl: `/images/categories/${child.art}.webp`,
+        imageAlt: `${child.name} at Hairtie`,
+        parentId,
+        position: position++,
+        isFeatured: child.featured ?? false,
+        isActive: true,
+        seoTitle: `${child.name} — Buy Online at Hairtie`,
+        seoDescription: child.description,
+      });
+    }
+  }
+
+  const products: Product[] = PRODUCTS.map((seed, index) => {
+    const slug = slugify(seed.name);
+    const sku = `HT-${seed.category.slice(0, 3).toUpperCase()}-${String(index + 1).padStart(3, "0")}`;
+    const isBag = BAG_CATEGORIES.includes(seed.category);
+    const tone = (index % 3) + 1;
+
+    const variants: ProductVariant[] = seed.colors.map(([color, hex], i) => ({
+      id: id("var", `${slug}-${i}`),
+      name: color,
+      sku: `${sku}-${color.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, "")}${i}`,
+      color,
+      colorHex: hex,
+      size: null,
+      price: null,
+      mrp: null,
+      stock: Math.max(2, Math.round((seed.stock ?? 25) / seed.colors.length)),
+      imageUrl: null,
+      isActive: true,
+    }));
+
+    return {
+      id: id("prd", slug),
+      name: seed.name,
+      slug,
+      sku,
+      brand: "Hairtie",
+      shortDescription: seed.short,
+      description: seed.description,
+      categoryId: id("cat", seed.category),
+
+      mrp: rupees(seed.mrp),
+      price: rupees(seed.price),
+      costPrice: null,
+
+      stock: seed.stock ?? 25,
+      lowStockThreshold: isBag ? 4 : 10,
+      trackInventory: true,
+      allowBackorder: false,
+
+      hsnCode: isBag ? "4202" : "9615",
+      gstRate: isBag ? 18 : 5,
+      priceIncludesTax: true,
+
+      weightGrams: seed.weight ?? 50,
+      lengthCm: seed.dims?.[0] ?? null,
+      widthCm: seed.dims?.[1] ?? null,
+      heightCm: seed.dims?.[2] ?? null,
+      material: seed.material,
+      careInstructions: isBag ? BAG_CARE : HAIR_CARE,
+      countryOfOrigin: "India",
+      videoUrl: null,
+
+      isNewArrival: seed.flags?.isNewArrival ?? false,
+      isBestseller: seed.flags?.isBestseller ?? false,
+      isTrending: seed.flags?.isTrending ?? false,
+      isFeatured: seed.flags?.isFeatured ?? false,
+      isOnSale: seed.flags?.isOnSale ?? false,
+
+      status: "ACTIVE",
+      position: index,
+
+      seoTitle: `${seed.name} — Buy Online | Hairtie`,
+      seoDescription: seed.short,
+      seoKeywords: seed.tags.join(", "),
+      ogImageUrl: null,
+      canonicalUrl: null,
+
+      viewCount: Math.max(0, 400 - index * 7 + (seed.flags?.isTrending ? 700 : 0)),
+      salesCount: Math.max(0, 90 - index * 3 + (seed.flags?.isBestseller ? 120 : 0)),
+      ratingSum: 0,
+      reviewCount: 0,
+
+      images: [1, 2, 3].map((angle) => ({
+        url: `/images/products/${seed.art}-${tone}-${angle}.webp`,
+        alt: `${seed.name} — view ${angle}`,
+      })),
+      variants,
+      attributes: [
+        { name: "Material", value: seed.material, group: "Specifications" },
+        ...seed.attributes.map(([name, value]) => ({ name, value, group: "Specifications" })),
+        ...(seed.dims
+          ? [
+              { name: "Length", value: `${seed.dims[0]} cm`, group: "Dimensions" },
+              { name: "Width", value: `${seed.dims[1]} cm`, group: "Dimensions" },
+              { name: "Height", value: `${seed.dims[2]} cm`, group: "Dimensions" },
+            ]
+          : []),
+      ],
+      tags: seed.tags,
+
+      createdAt: isoDaysBefore(index * 1.5),
+      updatedAt: isoDaysBefore(index * 1.5),
+    } satisfies Product;
+  });
+
+  const bySlug = new Map(products.map((product) => [product.slug, product]));
+
+  const reviews: Review[] = REVIEWS.map(([slug, name, rating, title, body], index) => {
+    const product = bySlug.get(slug);
+    if (product) {
+      product.ratingSum += rating;
+      product.reviewCount += 1;
+    }
+    return {
+      id: id("rev", `${slug}-${index}`),
+      productId: product?.id ?? "",
+      authorName: name,
+      authorEmail: null,
+      rating,
+      title,
+      body,
+      status: "APPROVED" as const,
+      isVerified: true,
+      createdAt: isoDaysBefore(index * 3 + 2),
+    };
+  }).filter((review) => review.productId);
+
+  const looks: Look[] = LOOKS.map((look, index) => ({
+    id: id("look", look.title),
+    title: look.title,
+    subtitle: look.subtitle,
+    imageUrl: look.image,
+    imageAlt: `${look.title} — styled by Hairtie`,
+    position: index,
+    isActive: true,
+    productIds: look.products.map((slug) => bySlug.get(slug)?.id).filter(Boolean) as string[],
+  }));
+
+  const categoryIdFor = (slug: string) => id("cat", slug);
+
+  const coupons: Coupon[] = COUPONS.map((coupon) => ({
+    id: id("cpn", coupon.code),
+    code: coupon.code,
+    description: coupon.description,
+    type: coupon.type,
+    value: coupon.value,
+    minOrderValue: coupon.minOrderValue ?? 0,
+    maxDiscount: coupon.maxDiscount ?? null,
+    scope: coupon.scope ?? "ALL",
+    productIds: [],
+    categoryIds:
+      coupon.scope === "CATEGORIES"
+        ? ["handbags", "sling-bags", "shoulder-bags", "tote-bags", "clutches"].map(categoryIdFor)
+        : [],
+    firstOrderOnly: coupon.firstOrderOnly ?? false,
+    usageLimit: null,
+    perUserLimit: 1,
+    usageCount: 0,
+    startsAt: isoDaysBefore(60),
+    expiresAt: null,
+    isActive: true,
+    createdAt: isoDaysBefore(60),
+  }));
+
+  function toPage(
+    slug: string,
+    title: string,
+    blocks: { type: string; settings: Record<string, unknown> }[],
+    seo: { seoTitle?: string; seoDescription?: string } = {},
+  ): Page {
+    const sections: Section[] = blocks.map((block, index) => ({
+      id: id("sec", `${slug}-${index}`),
+      type: block.type,
+      position: index,
+      isHidden: false,
+      settings: block.settings,
+    }));
+    return {
+      id: id("pg", slug),
+      slug,
+      title,
+      isSystem: true,
+      isPublished: true,
+      seoTitle: seo.seoTitle ?? title,
+      seoDescription: seo.seoDescription ?? null,
+      ogImageUrl: null,
+      sections,
+      publishedSnapshot: sections.map((section) => ({ ...section })),
+      hasDraftChanges: false,
+      updatedAt: isoDaysBefore(30),
+    };
+  }
+
+  const pages: Page[] = [
+    toPage("home", "Home", HOME_SECTIONS, {
+      seoTitle: "Hairtie — Hair Accessories & Handbags",
+      seoDescription:
+        "Discover beautiful hair accessories, handbags and everyday fashion pieces from Hairtie.",
+    }),
+    ...CONTENT_PAGES.map((page) =>
+      toPage(page.slug, page.title, page.sections, {
+        seoTitle: page.seoTitle,
+        seoDescription: page.seoDescription,
+      }),
+    ),
+  ];
+
+  const media: MediaAsset[] = [
+    ...["hero/hero-main", "hero/hero-mobile", "banners/promo-wide", "banners/promo-secondary"].map(
+      (p) => ({ path: p, folder: "Banners" }),
+    ),
+    ...["lifestyle/lifestyle-1", "lifestyle/lifestyle-2", "lifestyle/lifestyle-3"].map((p) => ({
+      path: p,
+      folder: "Lifestyle",
+    })),
+    ...["store/hairtie-store", "about/about-story"].map((p) => ({ path: p, folder: "Store" })),
+    ...[1, 2, 3, 4, 5, 6].map((n) => ({ path: `instagram/ig-${n}`, folder: "Instagram" })),
+  ].map((entry, index) => ({
+    id: id("med", entry.path),
+    url: `/images/${entry.path}.webp`,
+    filename: `${entry.path.split("/").pop()}.webp`,
+    mimeType: "image/webp",
+    width: null,
+    height: null,
+    sizeBytes: 0,
+    alt: "Hairtie demo image",
+    folder: entry.folder,
+    createdAt: isoDaysBefore(index),
+  }));
+
+  return { products, categories, pages, reviews, coupons, looks, media, orders: [], carts: [], newsletter: [] };
+}

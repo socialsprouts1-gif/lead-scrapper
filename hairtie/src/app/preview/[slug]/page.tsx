@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { allCategories } from "@/lib/catalog";
 import { getDraftPage } from "@/lib/pages";
 import { getSiteSettings, getTheme, themeToCssVars } from "@/lib/settings";
-import { getWishlistIds } from "@/app/actions/wishlist";
+import { getWishlistIds } from "@/lib/wishlist";
 import { SectionList } from "@/components/sections/SectionRenderer";
 import { Header } from "@/components/storefront/Header";
 import { Footer } from "@/components/storefront/Footer";
@@ -19,33 +18,27 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
  * reports clicks back to the editor so a section can be selected by clicking it.
  */
 export default async function PreviewPage(props: PageProps<"/preview/[slug]">) {
-  await requireAdmin();
   const { slug } = await props.params;
   const search = await props.searchParams;
   const selected = typeof search.selected === "string" ? search.selected : null;
   const themeDraft = search.theme === "draft";
 
-  const [draft, settings, theme, wishlist] = await Promise.all([
-    getDraftPage(slug),
-    getSiteSettings(),
-    getTheme({ draft: themeDraft }),
-    getWishlistIds(),
-  ]);
+  const draft = getDraftPage(slug);
+  const settings = getSiteSettings();
+  const theme = getTheme({ draft: themeDraft });
+  const wishlist = await getWishlistIds();
   if (!draft) notFound();
 
-  const categories = await prisma.category.findMany({
-    where: { isActive: true, parentId: null },
-    orderBy: [{ position: "asc" }, { name: "asc" }],
-    select: {
-      name: true,
-      slug: true,
-      children: {
-        where: { isActive: true },
-        orderBy: [{ position: "asc" }],
-        select: { name: true, slug: true },
-      },
-    },
-  });
+  const active = allCategories().filter((category) => category.isActive);
+  const categories = active
+    .filter((category) => !category.parentId)
+    .map((category) => ({
+      name: category.name,
+      slug: category.slug,
+      children: active
+        .filter((child) => child.parentId === category.id)
+        .map((child) => ({ name: child.name, slug: child.slug })),
+    }));
 
   return (
     <div style={themeToCssVars(theme) as React.CSSProperties} className="flex min-h-screen flex-col">
@@ -55,7 +48,6 @@ export default async function PreviewPage(props: PageProps<"/preview/[slug]">) {
           categories={categories}
           cartCount={0}
           wishlistCount={0}
-          signedIn={false}
         />
         <main className="flex-1">
           {draft.sections.length === 0 ? (

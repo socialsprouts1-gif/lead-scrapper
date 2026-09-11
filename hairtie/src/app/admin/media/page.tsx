@@ -1,13 +1,13 @@
-import { requireAdmin } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { isPersistent } from "@/lib/store";
+import { listMedia } from "@/lib/media";
 import { mediaDriver } from "@/lib/storage";
 import { AdminPage, PageHeader } from "@/components/admin/ui";
 import { MediaLibrary } from "@/components/admin/MediaPicker";
 
 export default async function AdminMediaPage() {
-  await requireAdmin();
-  const count = await prisma.mediaAsset.count();
+  const count = listMedia().length;
   const driver = mediaDriver();
+  const writable = isPersistent();
 
   return (
     <AdminPage>
@@ -16,12 +16,13 @@ export default async function AdminMediaPage() {
         description={`${count} ${count === 1 ? "image" : "images"} in your library. Upload once and reuse anywhere — products, banners, categories.`}
       />
 
-      {driver === "local" && (
+      {driver === "local" && !writable && (
         <div className="adm-card mb-5 p-4 text-sm" style={{ background: "var(--adm-accent-soft)", borderColor: "transparent" }}>
-          <strong>Storage:</strong> images are saved on the server&apos;s own disk. That works on a normal
-          server, but not on Vercel, whose disk is read-only. Before going live on Vercel, set
+          <strong>Uploads won&apos;t stick on this host.</strong> Its filesystem is read-only, so new
+          images are lost when the server restarts. To upload permanently, run the shop on a normal
+          server, or set
           <code className="mx-1 rounded px-1" style={{ background: "rgba(255,255,255,0.7)" }}>MEDIA_DRIVER=supabase</code>
-          and add your Supabase storage keys.
+          with your Supabase storage keys.
         </div>
       )}
 

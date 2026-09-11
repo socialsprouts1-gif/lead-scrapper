@@ -1,17 +1,12 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { allPages } from "@/lib/pages";
 import { formatDate } from "@/lib/utils";
 import { AdminPage, PageHeader, Pill } from "@/components/admin/ui";
 import { PageListActions } from "@/components/admin/PageListActions";
 
 export default async function AdminEditorPage() {
-  await requireAdmin();
 
-  const pages = await prisma.page.findMany({
-    orderBy: [{ isSystem: "desc" }, { slug: "asc" }],
-    include: { _count: { select: { sections: true } } },
-  });
+  const pages = allPages();
 
   const home = pages.find((page) => page.slug === "home");
   const rest = pages.filter((page) => page.slug !== "home");
@@ -33,7 +28,7 @@ export default async function AdminEditorPage() {
           <div>
             <p className="text-lg">Homepage</p>
             <p className="mt-1 text-sm" style={{ color: "var(--adm-muted)" }}>
-              {home._count.sections} sections · last changed {formatDate(home.updatedAt)}
+              {home.sections.length} sections · last changed {formatDate(home.updatedAt)}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -64,7 +59,7 @@ export default async function AdminEditorPage() {
                     </Link>
                   </td>
                   <td style={{ color: "var(--adm-muted)" }}>/{page.slug}</td>
-                  <td>{page._count.sections}</td>
+                  <td>{page.sections.length}</td>
                   <td>
                     <div className="flex flex-wrap gap-1.5">
                       {page.isPublished ? (

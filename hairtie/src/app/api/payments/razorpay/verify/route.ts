@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { mutate } from "@/lib/store";
 import { verifyRazorpaySignature } from "@/lib/razorpay";
-import { restoreStock } from "@/lib/orders";
+import { addOrderEvent, cancelUnpaidOrder, orderByNumber } from "@/lib/orders";
 
 const schema = z.object({
   orderNumber: z.string().min(3),
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   }
   const data = parsed.data;
 
-  const order = await prisma.order.findUnique({ where: { orderNumber: data.orderNumber } });
+  const order = orderByNumber(data.orderNumber);
   if (!order) return NextResponse.json({ ok: false, message: "Order not found." }, { status: 404 });
 
   // The signature is what proves the payment really happened — never trust the
@@ -41,15 +41,11 @@ export async function POST(request: Request) {
   });
 
   if (!valid) {
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: "FAILED",
-        events: {
-          create: { status: order.status, message: "Payment signature check failed.", createdBy: "system" },
-        },
-      },
+    mutate((db) => {
+      const stored = db.orders.find((entry) => entry.id === order.id);
+      if (stored) stored.paymentStatus = "FAILED";
     });
+    addOrderEvent(order.id, order.status, "Payment signature check failed.", "system");
     return NextResponse.json({ ok: false, message: "We could not verify that payment." }, { status: 400 });
   }
 
@@ -57,19 +53,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, orderNumber: order.orderNumber });
   }
 
-  await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      paymentStatus: "PAID",
-      status: "CONFIRMED",
-      confirmedAt: new Date(),
-      razorpayPaymentId: data.razorpay_payment_id,
-      razorpaySignature: data.razorpay_signature,
-      events: {
-        create: { status: "CONFIRMED", message: "Payment received online.", createdBy: "system" },
-      },
-    },
+  mutate((db) => {
+    const stored = db.orders.find((entry) => entry.id === order.id);
+    if (!stored) return;
+    stored.paymentStatus = "PAID";
+    stored.status = "CONFIRMED";
+    stored.confirmedAt = new Date().toISOString();
+    stored.razorpayPaymentId = data.razorpay_payment_id;
   });
+  addOrderEvent(order.id, "CONFIRMED", "Payment received online.", "system");
 
   return NextResponse.json({ ok: true, orderNumber: order.orderNumber });
 }
@@ -80,23 +72,6 @@ export async function DELETE(request: Request) {
   const orderNumber = searchParams.get("orderNumber");
   if (!orderNumber) return NextResponse.json({ ok: false }, { status: 400 });
 
-  const order = await prisma.order.findUnique({ where: { orderNumber } });
-  if (!order || order.paymentStatus === "PAID") return NextResponse.json({ ok: true });
-
-  await prisma.$transaction(async (tx) => {
-    await restoreStock(order.id, tx);
-    await tx.order.update({
-      where: { id: order.id },
-      data: {
-        status: "CANCELLED",
-        cancelledAt: new Date(),
-        paymentStatus: "FAILED",
-        events: {
-          create: { status: "CANCELLED", message: "Payment was not completed.", createdBy: "system" },
-        },
-      },
-    });
-  });
-
+  cancelUnpaidOrder(orderNumber);
   return NextResponse.json({ ok: true });
 }

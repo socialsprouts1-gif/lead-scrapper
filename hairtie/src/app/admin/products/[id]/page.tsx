@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { allCategories, productById } from "@/lib/catalog";
 import { AdminPage, PageHeader } from "@/components/admin/ui";
 import { ProductForm, type ProductFormValues } from "@/components/admin/ProductForm";
 
@@ -10,24 +9,10 @@ function rupees(paise: number | null | undefined) {
 }
 
 export default async function EditProductPage(props: PageProps<"/admin/products/[id]">) {
-  await requireAdmin();
   const { id } = await props.params;
 
-  const [product, categories] = await Promise.all([
-    prisma.product.findUnique({
-      where: { id },
-      include: {
-        images: { orderBy: { position: "asc" } },
-        variants: { orderBy: { position: "asc" } },
-        attributes: { orderBy: { position: "asc" } },
-        tags: { include: { tag: true } },
-      },
-    }),
-    prisma.category.findMany({
-      orderBy: [{ position: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, parentId: true },
-    }),
-  ]);
+  const product = productById(id);
+  const categories = allCategories();
 
   if (!product) notFound();
 
@@ -83,12 +68,8 @@ export default async function EditProductPage(props: PageProps<"/admin/products/
       imageUrl: variant.imageUrl ?? "",
       isActive: variant.isActive,
     })),
-    attributes: product.attributes.map((attribute) => ({
-      name: attribute.name,
-      value: attribute.value,
-      group: attribute.group,
-    })),
-    tags: product.tags.map((entry) => entry.tag.name),
+    attributes: product.attributes.map((attribute) => ({ ...attribute })),
+    tags: product.tags,
   };
 
   return (

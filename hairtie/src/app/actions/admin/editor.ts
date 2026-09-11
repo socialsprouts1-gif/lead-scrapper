@@ -2,18 +2,30 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { getAdminOrNull } from "@/lib/auth";
+import { createId, mutate, now, store } from "@/lib/store";
 import { getSectionDef, SECTION_REGISTRY } from "@/lib/sections";
-import { markPageDirty, publishPage } from "@/lib/pages";
-import { slugify, uniqueSlug } from "@/lib/utils";
-import type { Prisma } from "@/generated/prisma/client";
+import { discardPageDraft, markPageDirty, newSection, publishPage, renumber } from "@/lib/pages";
+import { slugify } from "@/lib/utils";
 import type { AdminResult } from "@/app/actions/admin/products";
 
-async function guard() {
-  const admin = await getAdminOrNull();
-  if (!admin) throw new Error("Not authorised.");
-  return admin;
+/** Paths the storefront already uses, which a new page must not shadow. */
+const RESERVED_SLUGS = [
+  "shop", "cart", "checkout", "admin", "api", "products", "categories",
+  "order", "wishlist", "preview", "track-order", "home",
+];
+
+function withPage<T>(pageId: string, change: (page: NonNullable<ReturnType<typeof findPage>>) => T) {
+  return mutate((db) => {
+    const page = db.pages.find((entry) => entry.id === pageId);
+    if (!page) return null;
+    const result = change(page);
+    markPageDirty(page);
+    return result;
+  });
+}
+
+function findPage(pageId: string) {
+  return store().pages.find((page) => page.id === pageId) ?? null;
 }
 
 export async function addSection(
@@ -21,171 +33,146 @@ export async function addSection(
   type: string,
   afterPosition?: number,
 ): Promise<AdminResult<{ id: string }>> {
-  await guard();
   const def = getSectionDef(type);
   if (!def) return { ok: false, message: "Unknown section type." };
 
-  const sections = await prisma.section.findMany({
-    where: { pageId },
-    orderBy: { position: "asc" },
-    select: { id: true },
+  const id = createId("sec");
+  const created = withPage(pageId, (page) => {
+    const insertAt = afterPosition === undefined ? page.sections.length : afterPosition + 1;
+    const section = newSection(type, insertAt, { ...def.defaults });
+    section.id = id;
+    for (const entry of page.sections) {
+      if (entry.position >= insertAt) entry.position += 1;
+    }
+    page.sections.push(section);
+    renumber(page.sections);
+    return true;
   });
 
-  const insertAt = afterPosition === undefined ? sections.length : afterPosition + 1;
-
-  await prisma.$transaction([
-    ...sections.slice(insertAt).map((section, index) =>
-      prisma.section.update({ where: { id: section.id }, data: { position: insertAt + index + 1 } }),
-    ),
-  ]);
-
-  const created = await prisma.section.create({
-    data: {
-      pageId,
-      type,
-      position: insertAt,
-      settings: def.defaults as Prisma.InputJsonObject,
-    },
-    select: { id: true },
-  });
-
-  await markPageDirty(pageId);
-  return { ok: true, message: `${def.label} added.`, data: { id: created.id } };
+  if (!created) return { ok: false, message: "That page no longer exists." };
+  return { ok: true, message: `${def.label} added.`, data: { id } };
 }
 
 export async function updateSection(sectionId: string, settings: unknown): Promise<AdminResult> {
-  await guard();
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
     return { ok: false, message: "Could not read those settings." };
   }
-  const section = await prisma.section.update({
-    where: { id: sectionId },
-    data: { settings: settings as Prisma.InputJsonObject },
-    select: { pageId: true },
+
+  const ok = mutate((db) => {
+    for (const page of db.pages) {
+      const section = page.sections.find((entry) => entry.id === sectionId);
+      if (section) {
+        section.settings = settings as Record<string, unknown>;
+        markPageDirty(page);
+        return true;
+      }
+    }
+    return false;
   });
-  await markPageDirty(section.pageId);
-  return { ok: true, message: "Saved." };
+
+  return ok ? { ok: true, message: "Saved." } : { ok: false, message: "That section no longer exists." };
 }
 
 export async function reorderSections(pageId: string, orderedIds: string[]): Promise<AdminResult> {
-  await guard();
-  await prisma.$transaction(
-    orderedIds.map((id, index) => prisma.section.update({ where: { id }, data: { position: index } })),
-  );
-  await markPageDirty(pageId);
-  return { ok: true, message: "Order saved." };
+  const ok = withPage(pageId, (page) => {
+    orderedIds.forEach((id, index) => {
+      const section = page.sections.find((entry) => entry.id === id);
+      if (section) section.position = index;
+    });
+    renumber(page.sections);
+    return true;
+  });
+  return ok ? { ok: true, message: "Order saved." } : { ok: false, message: "That page no longer exists." };
 }
 
 export async function moveSection(sectionId: string, direction: "up" | "down"): Promise<AdminResult> {
-  await guard();
-  const section = await prisma.section.findUnique({ where: { id: sectionId } });
-  if (!section) return { ok: false, message: "That section no longer exists." };
-
-  const siblings = await prisma.section.findMany({
-    where: { pageId: section.pageId },
-    orderBy: { position: "asc" },
-    select: { id: true },
+  const ok = mutate((db) => {
+    for (const page of db.pages) {
+      const sorted = [...page.sections].sort((a, b) => a.position - b.position);
+      const index = sorted.findIndex((entry) => entry.id === sectionId);
+      if (index < 0) continue;
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (target < 0 || target >= sorted.length) return true;
+      [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
+      sorted.forEach((section, position) => {
+        section.position = position;
+      });
+      markPageDirty(page);
+      return true;
+    }
+    return false;
   });
-  const index = siblings.findIndex((entry) => entry.id === sectionId);
-  const target = direction === "up" ? index - 1 : index + 1;
-  if (target < 0 || target >= siblings.length) return { ok: true };
-
-  const next = [...siblings];
-  [next[index], next[target]] = [next[target], next[index]];
-
-  await prisma.$transaction(
-    next.map((entry, position) => prisma.section.update({ where: { id: entry.id }, data: { position } })),
-  );
-  await markPageDirty(section.pageId);
-  return { ok: true, message: "Moved." };
+  return ok ? { ok: true, message: "Moved." } : { ok: false, message: "That section no longer exists." };
 }
 
 export async function duplicateSection(sectionId: string): Promise<AdminResult<{ id: string }>> {
-  await guard();
-  const section = await prisma.section.findUnique({ where: { id: sectionId } });
-  if (!section) return { ok: false, message: "That section no longer exists." };
-
-  const after = await prisma.section.findMany({
-    where: { pageId: section.pageId, position: { gt: section.position } },
-    orderBy: { position: "asc" },
-    select: { id: true },
-  });
-  await prisma.$transaction(
-    after.map((entry, index) =>
-      prisma.section.update({ where: { id: entry.id }, data: { position: section.position + index + 2 } }),
-    ),
-  );
-
-  const copy = await prisma.section.create({
-    data: {
-      pageId: section.pageId,
-      type: section.type,
-      position: section.position + 1,
-      isHidden: section.isHidden,
-      settings: section.settings as Prisma.InputJsonObject,
-    },
-    select: { id: true },
+  const id = createId("sec");
+  const ok = mutate((db) => {
+    for (const page of db.pages) {
+      const section = page.sections.find((entry) => entry.id === sectionId);
+      if (!section) continue;
+      for (const entry of page.sections) {
+        if (entry.position > section.position) entry.position += 1;
+      }
+      page.sections.push({
+        ...structuredClone(section),
+        id,
+        position: section.position + 1,
+      });
+      renumber(page.sections);
+      markPageDirty(page);
+      return true;
+    }
+    return false;
   });
 
-  await markPageDirty(section.pageId);
-  return { ok: true, message: "Section duplicated.", data: { id: copy.id } };
+  return ok
+    ? { ok: true, message: "Section duplicated.", data: { id } }
+    : { ok: false, message: "That section no longer exists." };
 }
 
 export async function toggleSectionHidden(sectionId: string, hidden: boolean): Promise<AdminResult> {
-  await guard();
-  const section = await prisma.section.update({
-    where: { id: sectionId },
-    data: { isHidden: hidden },
-    select: { pageId: true },
+  const ok = mutate((db) => {
+    for (const page of db.pages) {
+      const section = page.sections.find((entry) => entry.id === sectionId);
+      if (!section) continue;
+      section.isHidden = hidden;
+      markPageDirty(page);
+      return true;
+    }
+    return false;
   });
-  await markPageDirty(section.pageId);
-  return { ok: true, message: hidden ? "Section hidden." : "Section shown again." };
+  return ok
+    ? { ok: true, message: hidden ? "Section hidden." : "Section shown again." }
+    : { ok: false, message: "That section no longer exists." };
 }
 
 export async function deleteSection(sectionId: string): Promise<AdminResult> {
-  await guard();
-  const section = await prisma.section.delete({ where: { id: sectionId }, select: { pageId: true } });
-  await markPageDirty(section.pageId);
-  return { ok: true, message: "Section deleted." };
+  const ok = mutate((db) => {
+    for (const page of db.pages) {
+      if (!page.sections.some((entry) => entry.id === sectionId)) continue;
+      page.sections = page.sections.filter((entry) => entry.id !== sectionId);
+      renumber(page.sections);
+      markPageDirty(page);
+      return true;
+    }
+    return false;
+  });
+  return ok
+    ? { ok: true, message: "Section deleted." }
+    : { ok: false, message: "That section no longer exists." };
 }
 
 export async function publishPageChanges(slug: string): Promise<AdminResult> {
-  await guard();
-  const page = await publishPage(slug);
+  const page = publishPage(slug);
   if (!page) return { ok: false, message: "That page no longer exists." };
   revalidatePath("/", "layout");
   return { ok: true, message: "Published — your changes are live." };
 }
 
 export async function discardPageChanges(slug: string): Promise<AdminResult> {
-  await guard();
-  const page = await prisma.page.findUnique({ where: { slug } });
-  if (!page) return { ok: false, message: "That page no longer exists." };
-
-  const snapshot = page.publishedSnapshot;
-  if (!Array.isArray(snapshot)) {
-    return { ok: false, message: "This page has never been published, so there is nothing to go back to." };
-  }
-
-  // Rebuild the draft from the last published snapshot.
-  await prisma.$transaction(async (tx) => {
-    await tx.section.deleteMany({ where: { pageId: page.id } });
-    for (const [index, entry] of (snapshot as unknown[]).entries()) {
-      const row = entry as Record<string, unknown>;
-      if (!row.type) continue;
-      await tx.section.create({
-        data: {
-          pageId: page.id,
-          type: String(row.type),
-          position: index,
-          isHidden: Boolean(row.isHidden),
-          settings: (row.settings ?? {}) as Prisma.InputJsonObject,
-        },
-      });
-    }
-    await tx.page.update({ where: { id: page.id }, data: { hasDraftChanges: false } });
-  });
-
+  const result = discardPageDraft(slug);
+  if (!result.ok) return { ok: false, message: result.reason };
   return { ok: true, message: "Unpublished changes discarded." };
 }
 
@@ -198,20 +185,19 @@ const pageMetaSchema = z.object({
 });
 
 export async function updatePageMeta(pageId: string, input: unknown): Promise<AdminResult> {
-  await guard();
   const parsed = pageMetaSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "Please check the page details." };
   const data = parsed.data;
 
-  await prisma.page.update({
-    where: { id: pageId },
-    data: {
-      title: data.title,
-      seoTitle: data.seoTitle || null,
-      seoDescription: data.seoDescription || null,
-      ogImageUrl: data.ogImageUrl || null,
-      ...(data.isPublished === undefined ? {} : { isPublished: data.isPublished }),
-    },
+  mutate((db) => {
+    const page = db.pages.find((entry) => entry.id === pageId);
+    if (!page) return;
+    page.title = data.title;
+    page.seoTitle = data.seoTitle || null;
+    page.seoDescription = data.seoDescription || null;
+    page.ogImageUrl = data.ogImageUrl || null;
+    if (data.isPublished !== undefined) page.isPublished = data.isPublished;
+    page.updatedAt = now();
   });
 
   revalidatePath("/", "layout");
@@ -219,36 +205,44 @@ export async function updatePageMeta(pageId: string, input: unknown): Promise<Ad
 }
 
 export async function createPage(title: string): Promise<AdminResult<{ slug: string }>> {
-  await guard();
   const clean = title.trim();
   if (clean.length < 2) return { ok: false, message: "Please give the page a name." };
 
-  const slug = await uniqueSlug(slugify(clean), async (candidate) =>
-    Boolean(await prisma.page.findUnique({ where: { slug: candidate }, select: { id: true } })),
-  );
-
-  // Reserved paths would shadow real storefront routes.
-  const reserved = ["shop", "cart", "checkout", "account", "admin", "api", "products", "categories", "order", "wishlist", "preview", "track-order"];
-  if (reserved.includes(slug)) {
-    return { ok: false, message: `"${slug}" is used by the shop itself. Please pick another name.` };
+  const root = slugify(clean) || "page";
+  if (RESERVED_SLUGS.includes(root)) {
+    return { ok: false, message: `"${root}" is used by the shop itself. Please pick another name.` };
   }
 
-  const hero = SECTION_REGISTRY.find((entry) => entry.type === "textSection")!;
-  await prisma.page.create({
-    data: {
+  let slug = root;
+  let n = 2;
+  while (store().pages.some((page) => page.slug === slug)) {
+    slug = `${root}-${n}`;
+    n += 1;
+  }
+
+  const template = SECTION_REGISTRY.find((entry) => entry.type === "textSection")!;
+
+  mutate((db) => {
+    db.pages.push({
+      id: createId("pg"),
       slug,
       title: clean,
+      isSystem: false,
       isPublished: false,
-      sections: {
-        create: [
-          {
-            type: hero.type,
-            position: 0,
-            settings: { ...hero.defaults, heading: clean, body: "Write something here." } as Prisma.InputJsonObject,
-          },
-        ],
-      },
-    },
+      seoTitle: clean,
+      seoDescription: null,
+      ogImageUrl: null,
+      sections: [
+        newSection("textSection", 0, {
+          ...template.defaults,
+          heading: clean,
+          body: "Write something here.",
+        }),
+      ],
+      publishedSnapshot: null,
+      hasDraftChanges: true,
+      updatedAt: now(),
+    });
   });
 
   revalidatePath("/admin/editor");
@@ -256,13 +250,16 @@ export async function createPage(title: string): Promise<AdminResult<{ slug: str
 }
 
 export async function deletePage(pageId: string): Promise<AdminResult> {
-  await guard();
-  const page = await prisma.page.findUnique({ where: { id: pageId } });
+  const page = findPage(pageId);
   if (!page) return { ok: false, message: "That page no longer exists." };
   if (page.isSystem) {
     return { ok: false, message: "This is a built-in page and cannot be deleted. You can unpublish it instead." };
   }
-  await prisma.page.delete({ where: { id: pageId } });
+
+  mutate((db) => {
+    db.pages = db.pages.filter((entry) => entry.id !== pageId);
+  });
+
   revalidatePath("/", "layout");
   return { ok: true, message: "Page deleted." };
 }

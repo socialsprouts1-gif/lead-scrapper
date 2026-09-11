@@ -1,7 +1,7 @@
 import Script from "next/script";
-import { getCurrentUser } from "@/lib/auth";
 import { getCart } from "@/lib/cart";
-import { prisma } from "@/lib/db";
+import { allCategories } from "@/lib/catalog";
+import { getWishlistIds } from "@/lib/wishlist";
 import { getSiteSettings, getTheme, themeToCssVars } from "@/lib/settings";
 import { jsonLd, organizationSchema, resolveSiteUrl } from "@/lib/seo";
 import { Header } from "@/components/storefront/Header";
@@ -11,34 +11,28 @@ import { WhatsappFloat } from "@/components/storefront/WhatsappFloat";
 import { ToastProvider } from "@/components/ui/Toast";
 
 export default async function StorefrontLayout({ children }: LayoutProps<"/">) {
-  const [settings, theme, user, cart] = await Promise.all([
-    getSiteSettings(),
-    getTheme(),
-    getCurrentUser(),
+  const settings = getSiteSettings();
+  const theme = getTheme();
+  const [cart, wishlist, siteUrl] = await Promise.all([
     getCart(),
-  ]);
-
-  const [categories, wishlistCount, siteUrl] = await Promise.all([
-    prisma.category.findMany({
-      where: { isActive: true, parentId: null },
-      orderBy: [{ position: "asc" }, { name: "asc" }],
-      select: {
-        name: true,
-        slug: true,
-        children: {
-          where: { isActive: true },
-          orderBy: [{ position: "asc" }, { name: "asc" }],
-          select: { name: true, slug: true },
-        },
-      },
-    }),
-    user ? prisma.wishlistItem.count({ where: { userId: user.id } }) : Promise.resolve(0),
+    getWishlistIds(),
     resolveSiteUrl(settings),
   ]);
 
-  const cartCount = (cart?.items ?? [])
-    .filter((item) => !item.savedForLater)
-    .reduce((sum, item) => sum + item.quantity, 0);
+  const active = allCategories().filter((category) => category.isActive);
+  const categories = active
+    .filter((category) => !category.parentId)
+    .map((category) => ({
+      name: category.name,
+      slug: category.slug,
+      children: active
+        .filter((child) => child.parentId === category.id)
+        .map((child) => ({ name: child.name, slug: child.slug })),
+    }));
+
+  const cartCount = (cart?.lines ?? [])
+    .filter((line) => !line.item.savedForLater)
+    .reduce((sum, line) => sum + line.item.quantity, 0);
 
   const cssVars = themeToCssVars(theme);
   const gaId = settings.analytics.googleAnalyticsId;
@@ -50,12 +44,11 @@ export default async function StorefrontLayout({ children }: LayoutProps<"/">) {
           settings={settings}
           categories={categories}
           cartCount={cartCount}
-          wishlistCount={wishlistCount}
-          signedIn={Boolean(user)}
+          wishlistCount={wishlist.length}
         />
         <main className="flex-1">{children}</main>
         <Footer settings={settings} />
-        <MobileNav cartCount={cartCount} wishlistCount={wishlistCount} />
+        <MobileNav cartCount={cartCount} wishlistCount={wishlist.length} />
         <WhatsappFloat number={settings.contact.whatsapp} storeName={settings.storeName} />
       </ToastProvider>
 

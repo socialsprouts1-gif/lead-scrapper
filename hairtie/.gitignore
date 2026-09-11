@@ -5,8 +5,10 @@ out/
 build/
 dist/
 
-# Generated Prisma client — recreated by `npm install` / `prisma generate`
-src/generated/
+
+# The shop's data file — products, orders and page edits live here.
+# It is recreated from the demo content on first run.
+.data/
 
 # Uploaded media (local media driver)
 public/uploads/

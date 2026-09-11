@@ -1,23 +1,42 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { prisma } from "@/lib/db";
-import type { Prisma } from "@/generated/prisma/client";
-import type { OrderStatus } from "@/generated/prisma/enums";
-import { ORDER_STATUS_LABELS } from "@/lib/order-status";
-import { computeTotals, evaluateCoupon, lineMrp, linePrice, type CartWithItems } from "@/lib/cart";
+import { createId, mutate, now, store } from "@/lib/store";
+import { productById } from "@/lib/catalog";
+import { computeTotals, lineMrp, linePrice, type ResolvedCart } from "@/lib/cart";
 import { getSiteSettings } from "@/lib/settings";
+import type { Order, OrderStatus } from "@/lib/types";
+
+export {
+  ORDER_STATUS_FLOW,
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_TONE,
+} from "@/lib/order-status";
+
+import { ORDER_STATUS_LABELS } from "@/lib/order-status";
 
 export function generateOrderNumber() {
-  const now = new Date();
-  const stamp = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}${String(
-    now.getDate(),
+  const date = new Date();
+  const stamp = `${String(date.getFullYear()).slice(2)}${String(date.getMonth() + 1).padStart(2, "0")}${String(
+    date.getDate(),
   ).padStart(2, "0")}`;
-  // Six random characters (~2 billion per day) so that an order number is not
-  // guessable — guest customers open their order using this number alone.
+  // Six random characters, so an order number is not guessable — customers open
+  // their order with this number alone.
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = randomBytes(6);
   const random = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
   return `HT${stamp}${random}`;
+}
+
+export function orderByNumber(orderNumber: string) {
+  return store().orders.find((order) => order.orderNumber === orderNumber) ?? null;
+}
+
+export function orderById(id: string) {
+  return store().orders.find((order) => order.id === id) ?? null;
+}
+
+export function allOrders() {
+  return [...store().orders].sort((a, b) => b.placedAt.localeCompare(a.placedAt));
 }
 
 export type CheckoutDetails = {
@@ -36,242 +55,296 @@ export type CheckoutDetails = {
 export type StockProblem = { name: string; available: number };
 
 /** Verifies every line is still purchasable before an order is written. */
-export function findStockProblems(cart: CartWithItems): StockProblem[] {
+export function findStockProblems(resolved: ResolvedCart): StockProblem[] {
   const problems: StockProblem[] = [];
-  for (const line of cart.items) {
-    if (line.savedForLater) continue;
+  for (const line of resolved.lines) {
+    if (line.item.savedForLater) continue;
     if (line.product.status !== "ACTIVE") {
       problems.push({ name: line.product.name, available: 0 });
       continue;
     }
     if (!line.product.trackInventory || line.product.allowBackorder) continue;
     const available = line.variant ? line.variant.stock : line.product.stock;
-    if (line.quantity > available) problems.push({ name: line.product.name, available });
+    if (line.item.quantity > available) problems.push({ name: line.product.name, available });
   }
   return problems;
 }
 
 /**
- * Creates an order from the cart. Totals are recomputed on the server from the
- * database — the browser never gets to decide what anything costs.
+ * Creates an order from the cart. Totals are recomputed here from the stored
+ * catalogue — the browser never gets to decide what anything costs.
  */
-export async function createOrderFromCart(
-  cart: CartWithItems,
-  details: CheckoutDetails,
-  userId: string | null,
-) {
-  const settings = await getSiteSettings();
-  const totals = await computeTotals(cart, settings);
-  const lines = cart.items.filter((line) => !line.savedForLater);
+export function createOrderFromCart(resolved: ResolvedCart, details: CheckoutDetails): Order {
+  const settings = getSiteSettings();
+  const totals = computeTotals(resolved, settings);
+  const lines = resolved.lines.filter((line) => !line.item.savedForLater);
 
   if (lines.length === 0) throw new Error("Your bag is empty.");
   if (details.paymentMethod === "COD" && !settings.shipping.codEnabled) {
     throw new Error("Cash on Delivery is not available right now.");
   }
 
-  const couponCode = totals.couponCode;
-  const orderNumber = generateOrderNumber();
+  const problems = findStockProblems(resolved);
+  if (problems.length > 0) {
+    const first = problems[0];
+    throw new Error(
+      first.available === 0
+        ? `${first.name} just sold out. Please review your bag.`
+        : `Only ${first.available} of ${first.name} left. Please reduce the quantity.`,
+    );
+  }
 
-  const order = await prisma.$transaction(async (tx) => {
-    // Re-read stock inside the transaction so two simultaneous checkouts of the
-    // last item cannot both succeed.
-    for (const line of lines) {
-      if (!line.product.trackInventory || line.product.allowBackorder) continue;
-      if (line.variantId) {
-        const variant = await tx.productVariant.findUnique({
-          where: { id: line.variantId },
-          select: { stock: true },
-        });
-        if (!variant || variant.stock < line.quantity) {
-          throw new Error(`${line.product.name} just sold out. Please review your bag.`);
-        }
-      } else {
-        const product = await tx.product.findUnique({
-          where: { id: line.productId },
-          select: { stock: true },
-        });
-        if (!product || product.stock < line.quantity) {
-          throw new Error(`${line.product.name} just sold out. Please review your bag.`);
-        }
-      }
-    }
+  const timestamp = now();
+  const order: Order = {
+    id: createId("ord"),
+    orderNumber: generateOrderNumber(),
 
-    const created = await tx.order.create({
-      data: {
-        orderNumber,
-        userId,
-        customerName: details.customerName,
-        customerEmail: details.customerEmail.toLowerCase(),
-        customerPhone: details.customerPhone,
-        shippingLine1: details.shippingLine1,
-        shippingLine2: details.shippingLine2 || null,
-        shippingCity: details.shippingCity,
-        shippingState: details.shippingState,
-        shippingPincode: details.shippingPincode,
-        customerNote: details.customerNote || null,
-        subtotal: totals.subtotal,
-        discountAmount: totals.discount,
-        shippingFee: totals.shippingFee,
-        taxAmount: totals.taxIncluded,
-        total: totals.total,
-        couponCode,
-        paymentMethod: details.paymentMethod,
+    customerName: details.customerName,
+    customerEmail: details.customerEmail.toLowerCase(),
+    customerPhone: details.customerPhone,
+
+    shippingLine1: details.shippingLine1,
+    shippingLine2: details.shippingLine2 || null,
+    shippingCity: details.shippingCity,
+    shippingState: details.shippingState,
+    shippingPincode: details.shippingPincode,
+    shippingCountry: "India",
+
+    subtotal: totals.subtotal,
+    discountAmount: totals.discount,
+    shippingFee: totals.shippingFee,
+    taxAmount: totals.taxIncluded,
+    total: totals.total,
+    couponCode: totals.couponCode,
+
+    status: "PENDING",
+    paymentStatus: "UNPAID",
+    paymentMethod: details.paymentMethod,
+
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    refundId: null,
+    refundAmount: 0,
+
+    courierName: null,
+    trackingNumber: null,
+    trackingUrl: null,
+    customerNote: details.customerNote || null,
+    adminNote: null,
+
+    placedAt: timestamp,
+    confirmedAt: null,
+    shippedAt: null,
+    deliveredAt: null,
+    cancelledAt: null,
+
+    items: lines.map((line) => ({
+      id: createId("oi"),
+      productId: line.product.id,
+      variantId: line.variant?.id ?? null,
+      name: line.product.name,
+      sku: line.variant?.sku ?? line.product.sku,
+      variantName: line.variant?.name ?? null,
+      imageUrl: line.variant?.imageUrl ?? line.product.images[0]?.url ?? null,
+      price: linePrice(line),
+      mrp: lineMrp(line),
+      gstRate: line.product.gstRate,
+      hsnCode: line.product.hsnCode,
+      quantity: line.item.quantity,
+      lineTotal: linePrice(line) * line.item.quantity,
+    })),
+    events: [
+      {
+        id: createId("oe"),
         status: "PENDING",
-        paymentStatus: "UNPAID",
-        items: {
-          create: lines.map((line) => ({
-            productId: line.productId,
-            variantId: line.variantId,
-            name: line.product.name,
-            sku: line.variant?.sku ?? line.product.sku,
-            variantName: line.variant?.name ?? null,
-            imageUrl: line.variant?.imageUrl ?? line.product.images[0]?.url ?? null,
-            price: linePrice(line),
-            mrp: lineMrp(line),
-            gstRate: line.product.gstRate,
-            hsnCode: line.product.hsnCode,
-            quantity: line.quantity,
-            lineTotal: linePrice(line) * line.quantity,
-          })),
-        },
-        events: {
-          create: {
-            status: "PENDING",
-            message:
-              details.paymentMethod === "COD"
-                ? "Order placed with Cash on Delivery."
-                : "Order placed, awaiting payment.",
-            createdBy: "system",
-          },
-        },
+        message:
+          details.paymentMethod === "COD"
+            ? "Order placed with Cash on Delivery."
+            : "Order placed, awaiting payment.",
+        createdBy: "system",
+        createdAt: timestamp,
       },
-    });
+    ],
+  };
 
+  mutate((data) => {
+    data.orders.push(order);
+
+    // Take the stock out of inventory.
     for (const line of lines) {
-      if (line.product.trackInventory) {
-        if (line.variantId) {
-          await tx.productVariant.update({
-            where: { id: line.variantId },
-            data: { stock: { decrement: line.quantity } },
-          });
-        }
-        await tx.product.update({
-          where: { id: line.productId },
-          data: {
-            stock: { decrement: line.variantId ? 0 : line.quantity },
-            salesCount: { increment: line.quantity },
-          },
-        });
+      const product = data.products.find((entry) => entry.id === line.product.id);
+      if (!product) continue;
+      product.salesCount += line.item.quantity;
+      if (!product.trackInventory) continue;
+      if (line.variant) {
+        const variant = product.variants.find((entry) => entry.id === line.variant!.id);
+        if (variant) variant.stock = Math.max(0, variant.stock - line.item.quantity);
       } else {
-        await tx.product.update({
-          where: { id: line.productId },
-          data: { salesCount: { increment: line.quantity } },
-        });
+        product.stock = Math.max(0, product.stock - line.item.quantity);
       }
     }
 
-    if (couponCode) {
-      const coupon = await tx.coupon.findUnique({ where: { code: couponCode } });
-      if (coupon) {
-        await tx.coupon.update({ where: { id: coupon.id }, data: { usageCount: { increment: 1 } } });
-        await tx.couponRedemption.create({
-          data: {
-            couponId: coupon.id,
-            userId,
-            orderId: created.id,
-            email: details.customerEmail.toLowerCase(),
-            amount: totals.discount,
-          },
-        });
-      }
+    if (order.couponCode) {
+      const coupon = data.coupons.find((entry) => entry.code === order.couponCode);
+      if (coupon) coupon.usageCount += 1;
     }
 
-    // The bag is emptied here; saved-for-later items are deliberately kept.
-    await tx.cartItem.deleteMany({ where: { cartId: cart.id, savedForLater: false } });
-    await tx.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
-
-    return created;
+    // Empty the bag; saved-for-later items are deliberately kept.
+    const cart = data.carts.find((entry) => entry.token === resolved.cart.token);
+    if (cart) {
+      cart.items = cart.items.filter((item) => item.savedForLater);
+      cart.couponCode = null;
+      cart.updatedAt = timestamp;
+    }
   });
 
   return order;
 }
 
 /** Puts stock back when an order is cancelled or returned. */
-export async function restoreStock(orderId: string, tx?: Prisma.TransactionClient) {
-  const client = tx ?? prisma;
-  const items = await client.orderItem.findMany({ where: { orderId } });
-  for (const item of items) {
+function restoreStock(order: Order) {
+  for (const item of order.items) {
+    if (!item.productId) continue;
+    const product = productById(item.productId);
+    if (!product) continue;
+    product.salesCount = Math.max(0, product.salesCount - item.quantity);
+    if (!product.trackInventory) continue;
     if (item.variantId) {
-      await client.productVariant
-        .update({ where: { id: item.variantId }, data: { stock: { increment: item.quantity } } })
-        .catch(() => {});
-    } else if (item.productId) {
-      await client.product
-        .update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } })
-        .catch(() => {});
-    }
-    if (item.productId) {
-      await client.product
-        .update({ where: { id: item.productId }, data: { salesCount: { decrement: item.quantity } } })
-        .catch(() => {});
+      const variant = product.variants.find((entry) => entry.id === item.variantId);
+      if (variant) variant.stock += item.quantity;
+    } else {
+      product.stock += item.quantity;
     }
   }
 }
 
-export {
-  ORDER_STATUS_FLOW,
-  ORDER_STATUS_LABELS,
-  ORDER_STATUS_TONE,
-} from "@/lib/order-status";
-
 /** Records a status change and applies its side effects. */
-export async function changeOrderStatus(
+export function changeOrderStatus(
   orderId: string,
   status: OrderStatus,
   actor: string,
   message?: string,
 ) {
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) throw new Error("Order not found.");
-  if (order.status === status) return order;
+  return mutate((data) => {
+    const order = data.orders.find((entry) => entry.id === orderId);
+    if (!order) throw new Error("Order not found.");
+    if (order.status === status) return order;
 
-  const timestamps: Partial<Record<OrderStatus, Record<string, Date>>> = {
-    CONFIRMED: { confirmedAt: new Date() },
-    SHIPPED: { shippedAt: new Date() },
-    DELIVERED: { deliveredAt: new Date() },
-    CANCELLED: { cancelledAt: new Date() },
-  };
+    const wasOpen = !["CANCELLED", "RETURNED"].includes(order.status);
+    if ((status === "CANCELLED" || status === "RETURNED") && wasOpen) restoreStock(order);
 
-  const shouldRestoreStock =
-    (status === "CANCELLED" || status === "RETURNED") &&
-    !["CANCELLED", "RETURNED"].includes(order.status);
+    const timestamp = now();
+    order.status = status;
+    if (status === "CONFIRMED") order.confirmedAt = timestamp;
+    if (status === "SHIPPED") order.shippedAt = timestamp;
+    if (status === "DELIVERED") order.deliveredAt = timestamp;
+    if (status === "CANCELLED") order.cancelledAt = timestamp;
 
-  if (shouldRestoreStock) await restoreStock(orderId);
+    // A delivered COD order has been paid for, by definition.
+    if (status === "DELIVERED" && order.paymentMethod === "COD" && order.paymentStatus === "UNPAID") {
+      order.paymentStatus = "PAID";
+    }
 
-  return prisma.order.update({
-    where: { id: orderId },
-    data: {
+    order.events.push({
+      id: createId("oe"),
       status,
-      ...(timestamps[status] ?? {}),
-      ...(status === "DELIVERED" && order.paymentMethod === "COD" && order.paymentStatus === "UNPAID"
-        ? { paymentStatus: "PAID" as const }
-        : {}),
-      events: {
-        create: {
-          status,
-          message: message || `Status changed to ${ORDER_STATUS_LABELS[status]}.`,
-          createdBy: actor,
-        },
-      },
-    },
+      message: message || `Status changed to ${ORDER_STATUS_LABELS[status]}.`,
+      createdBy: actor,
+      createdAt: timestamp,
+    });
+
+    return order;
   });
 }
 
-export async function recomputeCouponUsage(code: string) {
-  const coupon = await prisma.coupon.findUnique({ where: { code } });
-  if (!coupon) return;
-  const count = await prisma.couponRedemption.count({ where: { couponId: coupon.id } });
-  await prisma.coupon.update({ where: { id: coupon.id }, data: { usageCount: count } });
+export function addOrderEvent(orderId: string, status: OrderStatus, message: string, actor: string) {
+  mutate((data) => {
+    const order = data.orders.find((entry) => entry.id === orderId);
+    if (!order) return;
+    order.events.push({
+      id: createId("oe"),
+      status,
+      message,
+      createdBy: actor,
+      createdAt: now(),
+    });
+  });
 }
 
-export { evaluateCoupon };
+export function cancelUnpaidOrder(orderNumber: string) {
+  mutate((data) => {
+    const order = data.orders.find((entry) => entry.orderNumber === orderNumber);
+    if (!order || order.paymentStatus === "PAID") return;
+    restoreStock(order);
+    order.status = "CANCELLED";
+    order.cancelledAt = now();
+    order.paymentStatus = "FAILED";
+    order.events.push({
+      id: createId("oe"),
+      status: "CANCELLED",
+      message: "Payment was not completed.",
+      createdBy: "system",
+      createdAt: now(),
+    });
+  });
+}
+
+/**
+ * Customers are derived from their orders rather than stored separately —
+ * there are no accounts, so an email address is the identity.
+ */
+export type CustomerSummary = {
+  key: string;
+  name: string;
+  email: string;
+  phone: string;
+  orderCount: number;
+  totalSpent: number;
+  lastOrderAt: string | null;
+  firstOrderAt: string | null;
+  orders: Order[];
+};
+
+export function customerSummaries(): CustomerSummary[] {
+  const map = new Map<string, CustomerSummary>();
+
+  for (const order of allOrders()) {
+    const key = order.customerEmail.toLowerCase();
+    const existing = map.get(key);
+    const counts = order.status !== "CANCELLED";
+
+    if (existing) {
+      existing.orders.push(order);
+      if (counts) {
+        existing.orderCount += 1;
+        existing.totalSpent += order.total;
+      }
+      if (!existing.lastOrderAt || order.placedAt > existing.lastOrderAt) {
+        existing.lastOrderAt = order.placedAt;
+        existing.name = order.customerName;
+        existing.phone = order.customerPhone;
+      }
+      if (!existing.firstOrderAt || order.placedAt < existing.firstOrderAt) {
+        existing.firstOrderAt = order.placedAt;
+      }
+    } else {
+      map.set(key, {
+        key,
+        name: order.customerName,
+        email: order.customerEmail,
+        phone: order.customerPhone,
+        orderCount: counts ? 1 : 0,
+        totalSpent: counts ? order.total : 0,
+        lastOrderAt: order.placedAt,
+        firstOrderAt: order.placedAt,
+        orders: [order],
+      });
+    }
+  }
+
+  return [...map.values()].sort((a, b) => (b.lastOrderAt ?? "").localeCompare(a.lastOrderAt ?? ""));
+}
+
+export function customerByKey(key: string) {
+  return customerSummaries().find((customer) => customer.key === key) ?? null;
+}

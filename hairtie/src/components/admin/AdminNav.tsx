@@ -8,7 +8,6 @@ import {
   Images, TicketPercent, MessageSquareText, ChartNoAxesColumn, Settings,
   Menu, X, ExternalLink, Palette,
 } from "lucide-react";
-import { LogoutButton } from "@/components/storefront/AuthForms";
 
 const GROUPS: { title: string; items: { href: string; label: string; icon: React.ElementType }[] }[] = [
   {
@@ -42,14 +41,14 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: React
 
 export function AdminNav({
   storeName,
-  userName,
   pendingOrders,
   pendingReviews,
+  temporaryStorage,
 }: {
   storeName: string;
-  userName: string;
   pendingOrders: number;
   pendingReviews: number;
+  temporaryStorage: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -115,13 +114,18 @@ export function AdminNav({
       </nav>
 
       <div className="border-t px-5 py-4 text-sm" style={{ borderColor: "var(--adm-line)" }}>
-        <p className="truncate">{userName}</p>
-        <div className="mt-2 flex items-center gap-4 text-xs">
-          <Link href="/" target="_blank" className="flex items-center gap-1" style={{ color: "var(--adm-muted)" }}>
-            View shop <ExternalLink size={12} strokeWidth={1.7} />
-          </Link>
-          <LogoutButton className="text-xs underline underline-offset-2" />
-        </div>
+        {temporaryStorage && (
+          <p
+            className="mb-3 rounded-lg px-2.5 py-2 text-[0.7rem] leading-snug"
+            style={{ background: "#f7efe2", color: "#8a6b3c" }}
+          >
+            This host can&apos;t save to disk, so changes you make here last only until the server
+            restarts.
+          </p>
+        )}
+        <Link href="/" target="_blank" className="flex items-center gap-1 text-xs" style={{ color: "var(--adm-muted)" }}>
+          View shop <ExternalLink size={12} strokeWidth={1.7} />
+        </Link>
       </div>
     </div>
   );

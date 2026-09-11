@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { hashPassword } from "@/lib/auth";
+import { mutate, now, store } from "@/lib/store";
 
 /**
- * Newsletter sign-ups are stored as customer records with a marketing note, so
- * the list is visible in Admin → Customers without needing a separate table or
- * a third-party mailing service on day one.
+ * Newsletter sign-ups are kept as a simple list, visible in
+ * Admin → Customers → Mailing list. There are no accounts to create.
  */
 const schema = z.object({ email: z.email() });
 
@@ -24,24 +22,9 @@ export async function POST(request: Request) {
   }
 
   const email = parsed.data.email.toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, notes: true } });
-
-  if (existing) {
-    if (!existing.notes?.includes("newsletter")) {
-      await prisma.user.update({
-        where: { id: existing.id },
-        data: { notes: [existing.notes, "newsletter"].filter(Boolean).join(" · ") },
-      });
-    }
-  } else {
-    // A random unusable password: this is a marketing contact, not a login.
-    await prisma.user.create({
-      data: {
-        email,
-        name: email.split("@")[0],
-        passwordHash: await hashPassword(crypto.randomUUID() + crypto.randomUUID()),
-        notes: "newsletter",
-      },
+  if (!store().newsletter.some((entry) => entry.email === email)) {
+    mutate((data) => {
+      data.newsletter.unshift({ email, createdAt: now() });
     });
   }
 

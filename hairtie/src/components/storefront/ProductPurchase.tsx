@@ -195,11 +195,6 @@ export function ProductPurchase({
           onClick={() =>
             startWish(async () => {
               const result = await toggleWishlist(productId);
-              if (result.requiresLogin) {
-                show(result.message ?? "Please sign in.", "error");
-                router.push("/account/login?next=" + encodeURIComponent(window.location.pathname));
-                return;
-              }
               if (result.ok) {
                 setSaved(Boolean(result.active));
                 show(result.message ?? "");

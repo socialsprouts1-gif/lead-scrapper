@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
-import { computeTotals, getCart, lineMrp, linePrice, lineStock } from "@/lib/cart";
+import { computeTotals, getCart, lineMrp, linePrice, lineStock, type CartLine } from "@/lib/cart";
 import { getSiteSettings } from "@/lib/settings";
 import { CartLines, type CartLineView } from "@/components/storefront/CartLines";
 import { CouponBox } from "@/components/storefront/CouponBox";
@@ -13,24 +13,26 @@ export const metadata: Metadata = {
 };
 
 export default async function CartPage() {
-  const [cart, settings] = await Promise.all([getCart(), getSiteSettings()]);
-  const totals = await computeTotals(cart, settings);
+  const resolved = await getCart();
+  const settings = getSiteSettings();
+  const totals = computeTotals(resolved, settings);
 
-  const toView = (line: NonNullable<typeof cart>["items"][number]): CartLineView => ({
-    id: line.id,
+  const toView = (line: CartLine): CartLineView => ({
+    id: line.item.id,
     productSlug: line.product.slug,
     name: line.product.name,
     variantName: line.variant?.name ?? null,
     image: line.variant?.imageUrl ?? line.product.images[0]?.url ?? null,
     price: linePrice(line),
     mrp: lineMrp(line),
-    quantity: line.quantity,
+    quantity: line.item.quantity,
     maxQuantity: Math.min(lineStock(line), 10),
-    savedForLater: line.savedForLater,
+    savedForLater: line.item.savedForLater,
   });
 
-  const active = (cart?.items ?? []).filter((line) => !line.savedForLater).map(toView);
-  const saved = (cart?.items ?? []).filter((line) => line.savedForLater).map(toView);
+  const lines = resolved?.lines ?? [];
+  const active = lines.filter((line) => !line.item.savedForLater).map(toView);
+  const saved = lines.filter((line) => line.item.savedForLater).map(toView);
 
   if (active.length === 0 && saved.length === 0) {
     return (

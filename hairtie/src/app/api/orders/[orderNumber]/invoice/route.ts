@@ -1,5 +1,4 @@
-import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { orderByNumber } from "@/lib/orders";
 import { getSiteSettings } from "@/lib/settings";
 import { formatPaise } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
@@ -12,18 +11,10 @@ import { formatDate } from "@/lib/utils";
 export async function GET(_request: Request, ctx: RouteContext<"/api/orders/[orderNumber]/invoice">) {
   const { orderNumber } = await ctx.params;
 
-  const [order, settings, user] = await Promise.all([
-    prisma.order.findUnique({ where: { orderNumber }, include: { items: true } }),
-    getSiteSettings(),
-    getCurrentUser(),
-  ]);
+  const order = orderByNumber(orderNumber);
+  const settings = getSiteSettings();
 
   if (!order) return new Response("Order not found", { status: 404 });
-
-  const staff = user?.role === "ADMIN" || user?.role === "STAFF";
-  if (!staff && user && order.userId && order.userId !== user.id) {
-    return new Response("Not found", { status: 404 });
-  }
 
   const escape = (value: string) =>
     value.replace(/[&<>"']/g, (c) =>

@@ -25,27 +25,12 @@ declare global {
   }
 }
 
-export type CheckoutDefaults = {
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
-  shippingLine1: string;
-  shippingLine2: string;
-  shippingCity: string;
-  shippingState: string;
-  shippingPincode: string;
-};
-
 export function CheckoutForm({
-  defaults,
-  signedIn,
   codEnabled,
   onlineEnabled,
   onlineConfigured,
   total,
 }: {
-  defaults: CheckoutDefaults;
-  signedIn: boolean;
   codEnabled: boolean;
   onlineEnabled: boolean;
   onlineConfigured: boolean;
@@ -76,7 +61,6 @@ export function CheckoutForm({
       shippingPincode: form.get("shippingPincode"),
       customerNote: form.get("customerNote"),
       paymentMethod: method,
-      saveAddress: form.get("saveAddress") === "on",
     });
 
     if (!result.ok) {
@@ -148,35 +132,33 @@ export function CheckoutForm({
         <section>
           <h2 className="text-xl">Contact details</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Field label="Full name" name="customerName" defaultValue={defaults.customerName} error={errors.customerName} autoComplete="name" required />
-            <Field label="Mobile number" name="customerPhone" defaultValue={defaults.customerPhone} error={errors.customerPhone} autoComplete="tel" inputMode="numeric" placeholder="10-digit number" required />
+            <Field label="Full name" name="customerName" error={errors.customerName} autoComplete="name" required />
+            <Field label="Mobile number" name="customerPhone" error={errors.customerPhone} autoComplete="tel" inputMode="numeric" placeholder="10-digit number" required />
             <div className="sm:col-span-2">
-              <Field label="Email address" name="customerEmail" type="email" defaultValue={defaults.customerEmail} error={errors.customerEmail} autoComplete="email" required />
+              <Field label="Email address" name="customerEmail" type="email" error={errors.customerEmail} autoComplete="email" required />
             </div>
           </div>
-          {!signedIn && (
-            <p className="mt-3 text-xs" style={{ color: "var(--ht-muted)" }}>
-              You can check out as a guest. Order updates go to this email and mobile number.
-            </p>
-          )}
+          <p className="mt-3 text-xs" style={{ color: "var(--ht-muted)" }}>
+            No account needed. Your order confirmation and updates go to this email and mobile number.
+          </p>
         </section>
 
         <section>
           <h2 className="text-xl">Delivery address</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Field label="Address" name="shippingLine1" defaultValue={defaults.shippingLine1} error={errors.shippingLine1} autoComplete="address-line1" placeholder="House / flat, building, street" required />
+              <Field label="Address" name="shippingLine1" error={errors.shippingLine1} autoComplete="address-line1" placeholder="House / flat, building, street" required />
             </div>
             <div className="sm:col-span-2">
-              <Field label="Landmark / area (optional)" name="shippingLine2" defaultValue={defaults.shippingLine2} autoComplete="address-line2" />
+              <Field label="Landmark / area (optional)" name="shippingLine2" autoComplete="address-line2" />
             </div>
-            <Field label="City" name="shippingCity" defaultValue={defaults.shippingCity} error={errors.shippingCity} autoComplete="address-level2" required />
+            <Field label="City" name="shippingCity" error={errors.shippingCity} autoComplete="address-level2" required />
             <div>
               <label className="ht-label" htmlFor="shippingState">State</label>
               <select
                 id="shippingState"
                 name="shippingState"
-                defaultValue={defaults.shippingState}
+                defaultValue=""
                 required
                 className="ht-input"
               >
@@ -187,15 +169,9 @@ export function CheckoutForm({
               </select>
               {errors.shippingState && <FieldError message={errors.shippingState} />}
             </div>
-            <Field label="Pincode" name="shippingPincode" defaultValue={defaults.shippingPincode} error={errors.shippingPincode} autoComplete="postal-code" inputMode="numeric" required />
+            <Field label="Pincode" name="shippingPincode" error={errors.shippingPincode} autoComplete="postal-code" inputMode="numeric" required />
           </div>
 
-          {signedIn && (
-            <label className="mt-4 flex items-center gap-2 text-sm">
-              <input type="checkbox" name="saveAddress" defaultChecked className="h-4 w-4" />
-              Save this address to my account
-            </label>
-          )}
         </section>
 
         <section>

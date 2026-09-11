@@ -2,25 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { getAdminOrNull } from "@/lib/auth";
-import { slugify, uniqueSlug } from "@/lib/utils";
+import { createId, mutate, now, store } from "@/lib/store";
+import { productById } from "@/lib/catalog";
+import { slugify } from "@/lib/utils";
+import type { Product, ProductVariant } from "@/lib/types";
 
 export type AdminResult<T = unknown> = { ok: boolean; message?: string; data?: T };
 
-async function guard() {
-  const admin = await getAdminOrNull();
-  if (!admin) throw new Error("Not authorised.");
-  return admin;
-}
-
 /** Prices are entered in rupees in the admin and stored in paise. */
-const money = z
-  .union([z.string(), z.number()])
-  .transform((value) => {
-    const n = typeof value === "string" ? Number(value.replace(/[^\d.-]/g, "")) : value;
-    return Number.isFinite(n) ? Math.round(n * 100) : 0;
-  });
+const money = z.union([z.string(), z.number()]).transform((value) => {
+  const n = typeof value === "string" ? Number(value.replace(/[^\d.-]/g, "")) : value;
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+});
 
 const optionalNumber = z
   .union([z.string(), z.number(), z.null()])
@@ -105,219 +98,138 @@ const productSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(40)).max(20),
 });
 
-export type ProductInput = z.input<typeof productSchema>;
-
-async function syncTags(tagNames: string[]) {
-  const ids: string[] = [];
-  for (const name of tagNames) {
-    const slug = slugify(name);
-    if (!slug) continue;
-    const tag = await prisma.tag.upsert({
-      where: { slug },
-      create: { name: name.trim(), slug },
-      update: {},
-    });
-    ids.push(tag.id);
-  }
-  return ids;
-}
-
-function corePayload(data: z.output<typeof productSchema>) {
-  return {
-    name: data.name,
-    sku: data.sku,
-    brand: data.brand || "Hairtie",
-    categoryId: data.categoryId || null,
-    shortDescription: data.shortDescription || null,
-    description: data.description || "",
-    mrp: data.mrp,
-    price: data.price,
-    costPrice: data.costPrice ?? null,
-    stock: data.stock,
-    lowStockThreshold: data.lowStockThreshold,
-    trackInventory: data.trackInventory,
-    allowBackorder: data.allowBackorder,
-    hsnCode: data.hsnCode || null,
-    gstRate: data.gstRate,
-    priceIncludesTax: data.priceIncludesTax,
-    weightGrams: data.weightGrams ? Math.round(data.weightGrams) : null,
-    lengthCm: data.lengthCm,
-    widthCm: data.widthCm,
-    heightCm: data.heightCm,
-    material: data.material || null,
-    careInstructions: data.careInstructions || null,
-    countryOfOrigin: data.countryOfOrigin || "India",
-    videoUrl: data.videoUrl || null,
-    isNewArrival: data.isNewArrival,
-    isBestseller: data.isBestseller,
-    isTrending: data.isTrending,
-    isFeatured: data.isFeatured,
-    isOnSale: data.isOnSale,
-    status: data.status,
-    seoTitle: data.seoTitle || null,
-    seoDescription: data.seoDescription || null,
-    seoKeywords: data.seoKeywords || null,
-    ogImageUrl: data.ogImageUrl || null,
-    canonicalUrl: data.canonicalUrl || null,
-  };
-}
+type ParsedProduct = z.output<typeof productSchema>;
 
 function validationMessage(error: z.ZodError) {
   return error.issues[0]?.message ?? "Please check the highlighted fields.";
 }
 
-export async function createProduct(input: unknown): Promise<AdminResult<{ id: string }>> {
-  await guard();
-  const parsed = productSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, message: validationMessage(parsed.error) };
-  const data = parsed.data;
-
-  const existingSku = await prisma.product.findUnique({ where: { sku: data.sku }, select: { id: true } });
-  if (existingSku) return { ok: false, message: `SKU ${data.sku} is already used by another product.` };
-
-  const slug = await uniqueSlug(data.slug || data.name, async (candidate) =>
-    Boolean(await prisma.product.findUnique({ where: { slug: candidate }, select: { id: true } })),
-  );
-  const tagIds = await syncTags(data.tags);
-  const maxPosition = await prisma.product.aggregate({ _max: { position: true } });
-
-  const product = await prisma.product.create({
-    data: {
-      ...corePayload(data),
-      slug,
-      position: (maxPosition._max.position ?? 0) + 1,
-      publishedAt: data.status === "ACTIVE" ? new Date() : null,
-      images: { create: data.images.map((image, index) => ({ url: image.url, alt: image.alt ?? "", position: index })) },
-      variants: {
-        create: data.variants.map((variant, index) => ({
-          name: variant.name,
-          sku: variant.sku || `${data.sku}-${index + 1}`,
-          color: variant.color || null,
-          colorHex: variant.colorHex || null,
-          size: variant.size || null,
-          price: variant.price || null,
-          mrp: variant.mrp || null,
-          stock: variant.stock,
-          imageUrl: variant.imageUrl || null,
-          isActive: variant.isActive ?? true,
-          position: index,
-        })),
-      },
-      attributes: {
-        create: data.attributes.map((attribute, index) => ({
-          name: attribute.name,
-          value: attribute.value,
-          group: attribute.group || "Specifications",
-          position: index,
-        })),
-      },
-      tags: { create: tagIds.map((tagId) => ({ tagId })) },
-    },
-    select: { id: true, slug: true },
-  });
-
-  revalidatePath("/", "layout");
-  return { ok: true, message: "Product saved.", data: { id: product.id } };
+function uniqueSlug(base: string, excludeId?: string) {
+  const root = slugify(base) || "product";
+  let candidate = root;
+  let n = 2;
+  while (store().products.some((product) => product.slug === candidate && product.id !== excludeId)) {
+    candidate = `${root}-${n}`;
+    n += 1;
+  }
+  return candidate;
 }
 
-export async function updateProduct(productId: string, input: unknown): Promise<AdminResult> {
-  await guard();
+function buildVariants(data: ParsedProduct): ProductVariant[] {
+  return data.variants.map((variant, index) => ({
+    id: variant.id ?? createId("var"),
+    name: variant.name,
+    sku: variant.sku || `${data.sku}-${index + 1}`,
+    color: variant.color || null,
+    colorHex: variant.colorHex || null,
+    size: variant.size || null,
+    price: variant.price || null,
+    mrp: variant.mrp || null,
+    stock: variant.stock,
+    imageUrl: variant.imageUrl || null,
+    isActive: variant.isActive ?? true,
+  }));
+}
+
+function applyCore(product: Product, data: ParsedProduct) {
+  product.name = data.name;
+  product.sku = data.sku;
+  product.brand = data.brand || "Hairtie";
+  product.categoryId = data.categoryId || null;
+  product.shortDescription = data.shortDescription || "";
+  product.description = data.description || "";
+  product.mrp = data.mrp;
+  product.price = data.price;
+  product.costPrice = data.costPrice ?? null;
+  product.stock = data.stock;
+  product.lowStockThreshold = data.lowStockThreshold;
+  product.trackInventory = data.trackInventory;
+  product.allowBackorder = data.allowBackorder;
+  product.hsnCode = data.hsnCode || null;
+  product.gstRate = data.gstRate;
+  product.priceIncludesTax = data.priceIncludesTax;
+  product.weightGrams = data.weightGrams ? Math.round(data.weightGrams) : null;
+  product.lengthCm = data.lengthCm;
+  product.widthCm = data.widthCm;
+  product.heightCm = data.heightCm;
+  product.material = data.material || null;
+  product.careInstructions = data.careInstructions || null;
+  product.countryOfOrigin = data.countryOfOrigin || "India";
+  product.videoUrl = data.videoUrl || null;
+  product.isNewArrival = data.isNewArrival;
+  product.isBestseller = data.isBestseller;
+  product.isTrending = data.isTrending;
+  product.isFeatured = data.isFeatured;
+  product.isOnSale = data.isOnSale;
+  product.status = data.status;
+  product.seoTitle = data.seoTitle || null;
+  product.seoDescription = data.seoDescription || null;
+  product.seoKeywords = data.seoKeywords || null;
+  product.ogImageUrl = data.ogImageUrl || null;
+  product.canonicalUrl = data.canonicalUrl || null;
+  product.images = data.images.map((image) => ({ url: image.url, alt: image.alt ?? "" }));
+  product.variants = buildVariants(data);
+  product.attributes = data.attributes.map((attribute) => ({
+    name: attribute.name,
+    value: attribute.value,
+    group: attribute.group || "Specifications",
+  }));
+  product.tags = data.tags;
+  product.updatedAt = now();
+}
+
+export async function createProduct(input: unknown): Promise<AdminResult<{ id: string }>> {
   const parsed = productSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: validationMessage(parsed.error) };
   const data = parsed.data;
 
-  const current = await prisma.product.findUnique({
-    where: { id: productId },
-    select: { id: true, slug: true, status: true, publishedAt: true },
-  });
-  if (!current) return { ok: false, message: "That product no longer exists." };
-
-  const skuOwner = await prisma.product.findUnique({ where: { sku: data.sku }, select: { id: true } });
-  if (skuOwner && skuOwner.id !== productId) {
+  if (store().products.some((product) => product.sku === data.sku)) {
     return { ok: false, message: `SKU ${data.sku} is already used by another product.` };
   }
 
-  const desiredSlug = slugify(data.slug || data.name);
-  const slug =
-    desiredSlug === current.slug
-      ? current.slug
-      : await uniqueSlug(desiredSlug, async (candidate) => {
-          const found = await prisma.product.findUnique({ where: { slug: candidate }, select: { id: true } });
-          return Boolean(found && found.id !== productId);
-        });
+  const id = createId("prd");
+  mutate((db) => {
+    const maxPosition = db.products.reduce((max, product) => Math.max(max, product.position), 0);
+    const product: Product = {
+      id,
+      slug: uniqueSlug(data.slug || data.name),
+      position: maxPosition + 1,
+      viewCount: 0,
+      salesCount: 0,
+      ratingSum: 0,
+      reviewCount: 0,
+      createdAt: now(),
+      updatedAt: now(),
+      // applyCore fills in everything else.
+    } as Product;
+    applyCore(product, data);
+    db.products.push(product);
+  });
 
-  const tagIds = await syncTags(data.tags);
-  const keptVariantIds = data.variants.map((variant) => variant.id).filter(Boolean) as string[];
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Product saved.", data: { id } };
+}
 
-  await prisma.$transaction(async (tx) => {
-    await tx.product.update({
-      where: { id: productId },
-      data: {
-        ...corePayload(data),
-        slug,
-        publishedAt:
-          data.status === "ACTIVE" ? (current.publishedAt ?? new Date()) : current.publishedAt,
-      },
-    });
+export async function updateProduct(productId: string, input: unknown): Promise<AdminResult> {
+  const parsed = productSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: validationMessage(parsed.error) };
+  const data = parsed.data;
 
-    // Images and attributes are simple lists — replacing them wholesale keeps
-    // the editor's drag-to-reorder behaviour honest.
-    await tx.productImage.deleteMany({ where: { productId } });
-    if (data.images.length) {
-      await tx.productImage.createMany({
-        data: data.images.map((image, index) => ({
-          productId,
-          url: image.url,
-          alt: image.alt ?? "",
-          position: index,
-        })),
-      });
-    }
+  const current = productById(productId);
+  if (!current) return { ok: false, message: "That product no longer exists." };
 
-    await tx.productAttribute.deleteMany({ where: { productId } });
-    if (data.attributes.length) {
-      await tx.productAttribute.createMany({
-        data: data.attributes.map((attribute, index) => ({
-          productId,
-          name: attribute.name,
-          value: attribute.value,
-          group: attribute.group || "Specifications",
-          position: index,
-        })),
-      });
-    }
+  if (store().products.some((product) => product.sku === data.sku && product.id !== productId)) {
+    return { ok: false, message: `SKU ${data.sku} is already used by another product.` };
+  }
 
-    // Variants are updated in place: deleting them would orphan the order items
-    // and cart rows that point at them.
-    await tx.productVariant.deleteMany({
-      where: { productId, id: { notIn: keptVariantIds.length ? keptVariantIds : ["__none__"] } },
-    });
+  const desired = slugify(data.slug || data.name);
+  const slug = desired === current.slug ? current.slug : uniqueSlug(desired, productId);
 
-    for (const [index, variant] of data.variants.entries()) {
-      const payload = {
-        name: variant.name,
-        sku: variant.sku || `${data.sku}-${index + 1}`,
-        color: variant.color || null,
-        colorHex: variant.colorHex || null,
-        size: variant.size || null,
-        price: variant.price || null,
-        mrp: variant.mrp || null,
-        stock: variant.stock,
-        imageUrl: variant.imageUrl || null,
-        isActive: variant.isActive ?? true,
-        position: index,
-      };
-      if (variant.id) {
-        await tx.productVariant.update({ where: { id: variant.id }, data: payload });
-      } else {
-        await tx.productVariant.create({ data: { ...payload, productId } });
-      }
-    }
-
-    await tx.productTag.deleteMany({ where: { productId } });
-    if (tagIds.length) {
-      await tx.productTag.createMany({ data: tagIds.map((tagId) => ({ productId, tagId })) });
-    }
+  mutate((db) => {
+    const product = db.products.find((entry) => entry.id === productId);
+    if (!product) return;
+    applyCore(product, data);
+    product.slug = slug;
   });
 
   revalidatePath("/", "layout");
@@ -325,18 +237,34 @@ export async function updateProduct(productId: string, input: unknown): Promise<
 }
 
 export async function deleteProduct(productId: string): Promise<AdminResult> {
-  await guard();
-  const orderedCount = await prisma.orderItem.count({ where: { productId } });
-  if (orderedCount > 0) {
+  const ordered = store().orders.some((order) =>
+    order.items.some((item) => item.productId === productId),
+  );
+
+  if (ordered) {
     // Deleting would blank the product name on past orders, so archive instead.
-    await prisma.product.update({ where: { id: productId }, data: { status: "ARCHIVED" } });
+    mutate((db) => {
+      const product = db.products.find((entry) => entry.id === productId);
+      if (product) product.status = "ARCHIVED";
+    });
     revalidatePath("/", "layout");
     return {
       ok: true,
       message: "This product has been ordered before, so it was archived rather than deleted.",
     };
   }
-  await prisma.product.delete({ where: { id: productId } });
+
+  mutate((db) => {
+    db.products = db.products.filter((product) => product.id !== productId);
+    db.reviews = db.reviews.filter((review) => review.productId !== productId);
+    for (const cart of db.carts) {
+      cart.items = cart.items.filter((item) => item.productId !== productId);
+    }
+    for (const look of db.looks) {
+      look.productIds = look.productIds.filter((id) => id !== productId);
+    }
+  });
+
   revalidatePath("/", "layout");
   return { ok: true, message: "Product deleted." };
 }
@@ -345,10 +273,12 @@ export async function setProductStatus(
   productId: string,
   status: "DRAFT" | "ACTIVE" | "ARCHIVED",
 ): Promise<AdminResult> {
-  await guard();
-  await prisma.product.update({
-    where: { id: productId },
-    data: { status, publishedAt: status === "ACTIVE" ? new Date() : undefined },
+  mutate((db) => {
+    const product = db.products.find((entry) => entry.id === productId);
+    if (product) {
+      product.status = status;
+      product.updatedAt = now();
+    }
   });
   revalidatePath("/", "layout");
   const labels = { DRAFT: "moved to drafts", ACTIVE: "published", ARCHIVED: "archived" };
@@ -356,82 +286,53 @@ export async function setProductStatus(
 }
 
 export async function duplicateProduct(productId: string): Promise<AdminResult<{ id: string }>> {
-  await guard();
-  const source = await prisma.product.findUnique({
-    where: { id: productId },
-    include: { images: true, variants: true, attributes: true, tags: true },
-  });
+  const source = productById(productId);
   if (!source) return { ok: false, message: "That product no longer exists." };
 
-  const slug = await uniqueSlug(`${source.slug}-copy`, async (candidate) =>
-    Boolean(await prisma.product.findUnique({ where: { slug: candidate }, select: { id: true } })),
-  );
-  const sku = await uniqueSlug(`${source.sku}-COPY`, async (candidate) =>
-    Boolean(await prisma.product.findUnique({ where: { sku: candidate }, select: { id: true } })),
-  );
+  const id = createId("prd");
+  mutate((db) => {
+    let sku = `${source.sku}-COPY`;
+    let n = 2;
+    while (db.products.some((product) => product.sku === sku)) {
+      sku = `${source.sku}-COPY${n}`;
+      n += 1;
+    }
 
-  const copy = await prisma.product.create({
-    data: {
+    db.products.push({
+      ...structuredClone(source),
+      id,
       name: `${source.name} (copy)`,
-      slug,
-      sku: sku.toUpperCase(),
-      brand: source.brand,
-      categoryId: source.categoryId,
-      shortDescription: source.shortDescription,
-      description: source.description,
-      mrp: source.mrp,
-      price: source.price,
-      costPrice: source.costPrice,
-      stock: source.stock,
-      lowStockThreshold: source.lowStockThreshold,
-      trackInventory: source.trackInventory,
-      allowBackorder: source.allowBackorder,
-      hsnCode: source.hsnCode,
-      gstRate: source.gstRate,
-      priceIncludesTax: source.priceIncludesTax,
-      weightGrams: source.weightGrams,
-      lengthCm: source.lengthCm,
-      widthCm: source.widthCm,
-      heightCm: source.heightCm,
-      material: source.material,
-      careInstructions: source.careInstructions,
-      countryOfOrigin: source.countryOfOrigin,
-      videoUrl: source.videoUrl,
+      slug: uniqueSlug(`${source.slug}-copy`),
+      sku,
       // A copy always starts as a draft so it cannot go live by accident.
       status: "DRAFT",
-      images: { create: source.images.map((i) => ({ url: i.url, alt: i.alt, position: i.position })) },
-      variants: {
-        create: source.variants.map((v, index) => ({
-          name: v.name,
-          sku: `${sku.toUpperCase()}-${index + 1}`,
-          color: v.color,
-          colorHex: v.colorHex,
-          size: v.size,
-          price: v.price,
-          mrp: v.mrp,
-          stock: v.stock,
-          imageUrl: v.imageUrl,
-          position: v.position,
-        })),
-      },
-      attributes: {
-        create: source.attributes.map((a) => ({
-          name: a.name, value: a.value, group: a.group, position: a.position,
-        })),
-      },
-      tags: { create: source.tags.map((t) => ({ tagId: t.tagId })) },
-    },
-    select: { id: true },
+      viewCount: 0,
+      salesCount: 0,
+      ratingSum: 0,
+      reviewCount: 0,
+      variants: source.variants.map((variant, index) => ({
+        ...variant,
+        id: createId("var"),
+        sku: `${sku}-${index + 1}`,
+      })),
+      createdAt: now(),
+      updatedAt: now(),
+    });
   });
 
   revalidatePath("/admin/products");
-  return { ok: true, message: "Product duplicated as a draft.", data: { id: copy.id } };
+  return { ok: true, message: "Product duplicated as a draft.", data: { id } };
 }
 
 export async function updateStock(productId: string, stock: number): Promise<AdminResult> {
-  await guard();
   if (!Number.isFinite(stock) || stock < 0) return { ok: false, message: "Enter a valid stock number." };
-  await prisma.product.update({ where: { id: productId }, data: { stock: Math.round(stock) } });
+  mutate((db) => {
+    const product = db.products.find((entry) => entry.id === productId);
+    if (product) {
+      product.stock = Math.round(stock);
+      product.updatedAt = now();
+    }
+  });
   revalidatePath("/", "layout");
   return { ok: true, message: "Stock updated." };
 }
@@ -440,7 +341,6 @@ export async function bulkProductAction(
   productIds: string[],
   action: "publish" | "draft" | "archive" | "delete",
 ): Promise<AdminResult> {
-  await guard();
   if (productIds.length === 0) return { ok: false, message: "Select at least one product." };
 
   if (action === "delete") {
@@ -460,7 +360,15 @@ export async function bulkProductAction(
   }
 
   const status = action === "publish" ? "ACTIVE" : action === "draft" ? "DRAFT" : "ARCHIVED";
-  await prisma.product.updateMany({ where: { id: { in: productIds } }, data: { status } });
+  mutate((db) => {
+    for (const product of db.products) {
+      if (productIds.includes(product.id)) {
+        product.status = status;
+        product.updatedAt = now();
+      }
+    }
+  });
+
   revalidatePath("/", "layout");
   return { ok: true, message: `${productIds.length} ${productIds.length === 1 ? "product" : "products"} updated.` };
 }

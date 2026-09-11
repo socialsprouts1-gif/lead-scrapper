@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { createId, mutate, now } from "@/lib/store";
+import { productById } from "@/lib/catalog";
 
 const schema = z.object({
   productId: z.string().min(1),
@@ -29,38 +29,25 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data;
-  const product = await prisma.product.findUnique({
-    where: { id: data.productId },
-    select: { id: true },
-  });
-  if (!product) return NextResponse.json({ message: "Product not found." }, { status: 404 });
+  if (!productById(data.productId)) {
+    return NextResponse.json({ message: "Product not found." }, { status: 404 });
+  }
 
-  const user = await getCurrentUser();
-
-  // A review counts as verified only if this account actually bought the item.
-  const verified = user
-    ? (await prisma.orderItem.count({
-        where: {
-          productId: product.id,
-          order: { userId: user.id, status: { in: ["DELIVERED", "SHIPPED"] } },
-        },
-      })) > 0
-    : false;
-
-  // Reviews start as PENDING and are only counted into a product's rating once
-  // an admin approves them, so the storefront cannot be spammed.
-  await prisma.review.create({
-    data: {
-      productId: product.id,
-      userId: user?.id ?? null,
+  // Reviews start as PENDING and only count towards a product's rating once an
+  // admin approves them, so the storefront cannot be spammed.
+  mutate((db) => {
+    db.reviews.unshift({
+      id: createId("rev"),
+      productId: data.productId,
       authorName: data.authorName,
-      authorEmail: data.authorEmail || user?.email || null,
+      authorEmail: data.authorEmail || null,
       rating: data.rating,
       title: data.title || null,
       body: data.body,
-      isVerified: verified,
       status: "PENDING",
-    },
+      isVerified: false,
+      createdAt: now(),
+    });
   });
 
   return NextResponse.json({

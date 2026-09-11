@@ -1,140 +1,79 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
-import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-import { getSiteSettings, type SiteSettings } from "@/lib/settings";
+import { createId, mutate, now, store } from "@/lib/store";
+import { productById } from "@/lib/catalog";
+import { getSiteSettings } from "@/lib/settings";
+import type { SiteSettings } from "@/lib/site-settings";
+import type { Cart, CartItem, Product, ProductVariant } from "@/lib/types";
 
 export const CART_COOKIE = "hairtie_cart";
 
-const cartInclude = {
-  items: {
-    orderBy: { createdAt: "asc" },
-    include: {
-      product: { include: { images: { orderBy: { position: "asc" }, take: 1 } } },
-      variant: true,
-    },
-  },
-} as const;
+/** A cart row joined with the product and variant it points at. */
+export type CartLine = {
+  item: CartItem;
+  product: Product;
+  variant: ProductVariant | null;
+};
 
-export type CartWithItems = NonNullable<Awaited<ReturnType<typeof findCart>>>;
-export type CartLine = CartWithItems["items"][number];
+export type ResolvedCart = {
+  cart: Cart;
+  lines: CartLine[];
+};
 
-async function findCart(where: { token?: string; userId?: string }) {
-  if (where.userId) {
-    return prisma.cart.findUnique({ where: { userId: where.userId }, include: cartInclude });
+function resolveLines(cart: Cart): CartLine[] {
+  const lines: CartLine[] = [];
+  for (const item of cart.items) {
+    const product = productById(item.productId);
+    // A product deleted from the admin simply drops out of the bag.
+    if (!product) continue;
+    const variant = item.variantId
+      ? (product.variants.find((entry) => entry.id === item.variantId) ?? null)
+      : null;
+    if (item.variantId && !variant) continue;
+    lines.push({ item, product, variant });
   }
-  if (where.token) {
-    return prisma.cart.findUnique({ where: { token: where.token }, include: cartInclude });
-  }
-  return null;
+  return lines;
 }
 
 /** Read-only cart lookup — safe to call from a Server Component. */
-export async function getCart() {
-  const user = await getCurrentUser();
-  if (user) {
-    const owned = await findCart({ userId: user.id });
-    if (owned) return owned;
-  }
+export async function getCart(): Promise<ResolvedCart | null> {
   const token = (await cookies()).get(CART_COOKIE)?.value;
   if (!token) return null;
-  return findCart({ token });
+  const cart = store().carts.find((entry) => entry.token === token);
+  if (!cart) return null;
+  return { cart, lines: resolveLines(cart) };
 }
 
 /**
  * Cart lookup that creates one if needed. Only call from a Server Action or
  * Route Handler — it writes a cookie.
  */
-export async function ensureCart() {
-  const user = await getCurrentUser();
-  const store = await cookies();
-  let token = store.get(CART_COOKIE)?.value;
+export async function ensureCart(): Promise<ResolvedCart> {
+  const jar = await cookies();
+  let token = jar.get(CART_COOKIE)?.value;
 
-  if (user) {
-    const owned = await findCart({ userId: user.id });
-    if (owned) {
-      // Fold an anonymous cart into the signed-in one, then retire the token.
-      if (token && token !== owned.token) await mergeGuestCart(token, owned.id);
-      return (await findCart({ userId: user.id }))!;
-    }
-    if (token) {
-      const guest = await prisma.cart.findUnique({ where: { token } });
-      if (guest && !guest.userId) {
-        await prisma.cart.update({ where: { id: guest.id }, data: { userId: user.id } });
-        return (await findCart({ userId: user.id }))!;
-      }
-    }
-    const created = await prisma.cart.create({
-      data: { token: randomUUID(), userId: user.id },
-      include: cartInclude,
+  let cart = token ? store().carts.find((entry) => entry.token === token) : undefined;
+
+  if (!cart) {
+    token = randomUUID();
+    cart = { token, couponCode: null, items: [], updatedAt: now() };
+    mutate((data) => {
+      data.carts.push(cart!);
+      // Keep the file small: drop carts nobody has touched in two months.
+      const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+      data.carts = data.carts.filter((entry) => new Date(entry.updatedAt).getTime() > cutoff);
     });
-    setCartCookie(store, created.token);
-    return created;
-  }
-
-  if (token) {
-    const existing = await findCart({ token });
-    if (existing) return existing;
-  }
-  token = randomUUID();
-  const created = await prisma.cart.create({ data: { token }, include: cartInclude });
-  setCartCookie(store, token);
-  return created;
-}
-
-function setCartCookie(store: Awaited<ReturnType<typeof cookies>>, token: string) {
-  store.set(CART_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 60,
-  });
-}
-
-async function mergeGuestCart(guestToken: string, targetCartId: string) {
-  const guest = await prisma.cart.findUnique({ where: { token: guestToken }, include: { items: true } });
-  if (!guest || guest.id === targetCartId) return;
-  for (const item of guest.items) {
-    // variantId is nullable, so a compound upsert is not usable here.
-    const existing = await prisma.cartItem.findFirst({
-      where: { cartId: targetCartId, productId: item.productId, variantId: item.variantId },
+    jar.set(CART_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 60,
     });
-    if (existing) {
-      await prisma.cartItem.update({
-        where: { id: existing.id },
-        data: { quantity: existing.quantity + item.quantity },
-      });
-    } else {
-      await prisma.cartItem.create({
-        data: {
-          cartId: targetCartId,
-          productId: item.productId,
-          variantId: item.variantId,
-          quantity: item.quantity,
-          savedForLater: item.savedForLater,
-        },
-      });
-    }
   }
-  await prisma.cart.delete({ where: { id: guest.id } });
-}
 
-/** Called after a successful sign-in so the guest cart is not lost. */
-export async function adoptGuestCart(userId: string) {
-  const store = await cookies();
-  const token = store.get(CART_COOKIE)?.value;
-  if (!token) return;
-  const guest = await prisma.cart.findUnique({ where: { token } });
-  if (!guest) return;
-  const owned = await prisma.cart.findUnique({ where: { userId } });
-  if (owned) {
-    await mergeGuestCart(token, owned.id);
-    setCartCookie(store, owned.token);
-  } else if (!guest.userId) {
-    await prisma.cart.update({ where: { id: guest.id }, data: { userId } });
-  }
+  return { cart, lines: resolveLines(cart) };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -158,66 +97,47 @@ export type CouponResult =
   | { ok: true; code: string; discount: number; label: string }
   | { ok: false; reason: string };
 
-export async function evaluateCoupon(
-  code: string,
-  lines: CartLine[],
-  ctx: { userId?: string | null; email?: string | null },
-): Promise<CouponResult> {
+export function evaluateCoupon(code: string, lines: CartLine[]): CouponResult {
   const normalised = code.trim().toUpperCase();
   if (!normalised) return { ok: false, reason: "Enter a coupon code." };
 
-  const coupon = await prisma.coupon.findUnique({ where: { code: normalised } });
+  const coupon = store().coupons.find((entry) => entry.code === normalised);
   if (!coupon || !coupon.isActive) return { ok: false, reason: "That coupon code isn't valid." };
 
-  const now = new Date();
-  if (coupon.startsAt > now) return { ok: false, reason: "This coupon isn't active yet." };
-  if (coupon.expiresAt && coupon.expiresAt < now) return { ok: false, reason: "This coupon has expired." };
-  if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit)
+  const nowMs = Date.now();
+  if (new Date(coupon.startsAt).getTime() > nowMs) {
+    return { ok: false, reason: "This coupon isn't active yet." };
+  }
+  if (coupon.expiresAt && new Date(coupon.expiresAt).getTime() < nowMs) {
+    return { ok: false, reason: "This coupon has expired." };
+  }
+  if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
     return { ok: false, reason: "This coupon has been fully used." };
+  }
 
   // Only the lines the coupon applies to count towards the discount.
   const eligible = lines.filter((line) => {
-    if (coupon.scope === "PRODUCTS") return coupon.productIds.includes(line.productId);
-    if (coupon.scope === "CATEGORIES")
+    if (coupon.scope === "PRODUCTS") return coupon.productIds.includes(line.product.id);
+    if (coupon.scope === "CATEGORIES") {
       return line.product.categoryId ? coupon.categoryIds.includes(line.product.categoryId) : false;
+    }
     return true;
   });
-  if (eligible.length === 0)
+  if (eligible.length === 0) {
     return { ok: false, reason: "This coupon doesn't apply to the items in your bag." };
+  }
 
-  const cartTotal = lines.reduce((sum, l) => sum + linePrice(l) * l.quantity, 0);
-  if (cartTotal < coupon.minOrderValue)
+  const cartTotal = lines.reduce((sum, line) => sum + linePrice(line) * line.item.quantity, 0);
+  if (cartTotal < coupon.minOrderValue) {
     return {
       ok: false,
       reason: `Add items worth ₹${Math.ceil((coupon.minOrderValue - cartTotal) / 100)} more to use this coupon.`,
     };
-
-  if (coupon.firstOrderOnly) {
-    const previous = await prisma.order.count({
-      where: {
-        status: { notIn: ["CANCELLED"] },
-        OR: [
-          ...(ctx.userId ? [{ userId: ctx.userId }] : []),
-          ...(ctx.email ? [{ customerEmail: ctx.email }] : []),
-        ],
-      },
-    });
-    if (previous > 0) return { ok: false, reason: "This coupon is for first orders only." };
   }
 
-  if (ctx.userId && coupon.perUserLimit > 0) {
-    const used = await prisma.couponRedemption.count({
-      where: { couponId: coupon.id, userId: ctx.userId },
-    });
-    if (used >= coupon.perUserLimit)
-      return { ok: false, reason: "You've already used this coupon." };
-  }
-
-  const eligibleTotal = eligible.reduce((sum, l) => sum + linePrice(l) * l.quantity, 0);
+  const eligibleTotal = eligible.reduce((sum, line) => sum + linePrice(line) * line.item.quantity, 0);
   let discount =
-    coupon.type === "PERCENT"
-      ? Math.round((eligibleTotal * coupon.value) / 100)
-      : coupon.value;
+    coupon.type === "PERCENT" ? Math.round((eligibleTotal * coupon.value) / 100) : coupon.value;
   if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
   discount = Math.min(discount, eligibleTotal);
 
@@ -247,28 +167,24 @@ export type CartTotals = {
   total: number;
 };
 
-export async function computeTotals(
-  cart: CartWithItems | null,
-  settings?: SiteSettings,
-): Promise<CartTotals> {
-  const config = settings ?? (await getSiteSettings());
-  const lines = (cart?.items ?? []).filter((l) => !l.savedForLater);
+export function computeTotals(resolved: ResolvedCart | null, settings?: SiteSettings): CartTotals {
+  const config = settings ?? getSiteSettings();
+  const lines = (resolved?.lines ?? []).filter((line) => !line.item.savedForLater);
 
-  const subtotal = lines.reduce((sum, l) => sum + linePrice(l) * l.quantity, 0);
-  const mrpTotal = lines.reduce((sum, l) => sum + Math.max(lineMrp(l), linePrice(l)) * l.quantity, 0);
-  const itemCount = lines.reduce((sum, l) => sum + l.quantity, 0);
+  const subtotal = lines.reduce((sum, line) => sum + linePrice(line) * line.item.quantity, 0);
+  const mrpTotal = lines.reduce(
+    (sum, line) => sum + Math.max(lineMrp(line), linePrice(line)) * line.item.quantity,
+    0,
+  );
+  const itemCount = lines.reduce((sum, line) => sum + line.item.quantity, 0);
 
   let discount = 0;
   let couponLabel: string | null = null;
   let couponError: string | null = null;
-  let couponCode = cart?.couponCode ?? null;
+  let couponCode = resolved?.cart.couponCode ?? null;
 
   if (couponCode && lines.length > 0) {
-    const user = await getCurrentUser();
-    const result = await evaluateCoupon(couponCode, lines, {
-      userId: user?.id ?? null,
-      email: user?.email ?? null,
-    });
+    const result = evaluateCoupon(couponCode, lines);
     if (result.ok) {
       discount = result.discount;
       couponLabel = result.label;
@@ -284,9 +200,9 @@ export async function computeTotals(
     itemCount === 0 || (threshold > 0 && payable >= threshold) ? 0 : config.shipping.flatRatePaise;
 
   // Listed prices include GST, so tax is shown as the portion already inside the price.
-  const taxIncluded = lines.reduce((sum, l) => {
-    const gross = linePrice(l) * l.quantity;
-    const rate = l.product.gstRate || 0;
+  const taxIncluded = lines.reduce((sum, line) => {
+    const gross = linePrice(line) * line.item.quantity;
+    const rate = line.product.gstRate || 0;
     return sum + Math.round(gross - gross / (1 + rate / 100));
   }, 0);
 
@@ -303,5 +219,16 @@ export async function computeTotals(
     amountToFreeShipping: threshold > 0 ? Math.max(threshold - payable, 0) : 0,
     taxIncluded,
     total: payable + shippingFee,
+  };
+}
+
+export function newCartItem(productId: string, variantId: string | null, quantity: number): CartItem {
+  return {
+    id: createId("ci"),
+    productId,
+    variantId,
+    quantity,
+    savedForLater: false,
+    addedAt: now(),
   };
 }

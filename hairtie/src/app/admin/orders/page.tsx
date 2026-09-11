@@ -1,18 +1,14 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import type { Prisma } from "@/generated/prisma/client";
 import { formatPaise } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
-import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/orders";
+import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE, allOrders } from "@/lib/orders";
 import { AdminPage, EmptyState, PageHeader, Pagination, Pill } from "@/components/admin/ui";
 import { FilterSelect, SearchInput } from "@/components/admin/Controls";
 
 const PER_PAGE = 25;
 
 export default async function AdminOrdersPage(props: PageProps<"/admin/orders">) {
-  await requireAdmin();
   const params = await props.searchParams;
 
   const q = typeof params.q === "string" ? params.q.trim() : "";
@@ -20,41 +16,28 @@ export default async function AdminOrdersPage(props: PageProps<"/admin/orders">)
   const payment = typeof params.payment === "string" ? params.payment : "";
   const page = Math.max(Number(params.page ?? 1), 1);
 
-  const and: Prisma.OrderWhereInput[] = [];
-  if (q) {
-    and.push({
-      OR: [
-        { orderNumber: { contains: q, mode: "insensitive" } },
-        { customerName: { contains: q, mode: "insensitive" } },
-        { customerEmail: { contains: q, mode: "insensitive" } },
-        { customerPhone: { contains: q } },
-        { shippingPincode: { contains: q } },
-      ],
-    });
-  }
-  if (status) and.push({ status: status as Prisma.OrderWhereInput["status"] });
-  if (payment) and.push({ paymentStatus: payment as Prisma.OrderWhereInput["paymentStatus"] });
-  const where: Prisma.OrderWhereInput = and.length ? { AND: and } : {};
+  const everything = allOrders();
+  const term = q.toLowerCase();
 
-  const [orders, total, counts] = await Promise.all([
-    prisma.order.findMany({
-      where,
-      orderBy: { placedAt: "desc" },
-      skip: (page - 1) * PER_PAGE,
-      take: PER_PAGE,
-      select: {
-        id: true, orderNumber: true, customerName: true, customerPhone: true,
-        shippingCity: true, total: true, status: true, paymentStatus: true,
-        paymentMethod: true, placedAt: true,
-        _count: { select: { items: true } },
-      },
-    }),
-    prisma.order.count({ where }),
-    prisma.order.groupBy({ by: ["status"], _count: true }),
-  ]);
+  const matched = everything.filter((order) => {
+    if (q) {
+      const hit =
+        order.orderNumber.toLowerCase().includes(term) ||
+        order.customerName.toLowerCase().includes(term) ||
+        order.customerEmail.toLowerCase().includes(term) ||
+        order.customerPhone.includes(q) ||
+        order.shippingPincode.includes(q);
+      if (!hit) return false;
+    }
+    if (status && order.status !== status) return false;
+    if (payment && order.paymentStatus !== payment) return false;
+    return true;
+  });
 
+  const total = matched.length;
+  const orders = matched.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   const pageCount = Math.ceil(total / PER_PAGE);
-  const countFor = (value: string) => counts.find((c) => c.status === value)?._count ?? 0;
+  const countFor = (value: string) => everything.filter((order) => order.status === value).length;
 
   function hrefFor(target: number) {
     const next = new URLSearchParams(
@@ -135,7 +118,7 @@ export default async function AdminOrdersPage(props: PageProps<"/admin/orders">)
                           {order.customerPhone} · {order.shippingCity}
                         </div>
                       </td>
-                      <td>{order._count.items}</td>
+                      <td>{order.items.length}</td>
                       <td>{formatPaise(order.total)}</td>
                       <td>
                         <div className="text-xs">{order.paymentMethod === "COD" ? "COD" : "Online"}</div>

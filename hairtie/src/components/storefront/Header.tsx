@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Heart, Menu, Search, ShoppingBag, User, X, ChevronDown } from "lucide-react";
+import { Heart, Menu, Search, ShoppingBag, X, ChevronDown } from "lucide-react";
 import type { SiteSettings } from "@/lib/settings";
 
 type NavCategory = { name: string; slug: string; children: { name: string; slug: string }[] };
@@ -14,13 +14,11 @@ export function Header({
   categories,
   cartCount,
   wishlistCount,
-  signedIn,
 }: {
   settings: SiteSettings;
   categories: NavCategory[];
   cartCount: number;
   wishlistCount: number;
-  signedIn: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -181,15 +179,6 @@ export function Header({
                 <Search size={19} strokeWidth={1.5} />
               </button>
             )}
-            {settings.header.showAccount && (
-              <Link
-                href={signedIn ? "/account" : "/account/login"}
-                className="hidden p-2 md:block"
-                aria-label={signedIn ? "Your account" : "Sign in"}
-              >
-                <User size={19} strokeWidth={1.5} />
-              </Link>
-            )}
             {settings.header.showWishlist && (
               <Link href="/wishlist" className="relative hidden p-2 md:block" aria-label="Wishlist">
                 <Heart size={19} strokeWidth={1.5} />
@@ -273,7 +262,6 @@ export function Header({
                   { label: "Visit Our Store", href: "/store" },
                   { label: "Track Order", href: "/track-order" },
                   { label: "Contact", href: "/contact" },
-                  { label: signedIn ? "My Account" : "Sign In", href: signedIn ? "/account" : "/account/login" },
                 ].map((link) => (
                   <Link key={link.href} href={link.href} className="block py-2.5 text-base">
                     {link.label}

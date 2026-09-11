@@ -1,20 +1,13 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { allCategories } from "@/lib/catalog";
 import { getDraftPage } from "@/lib/pages";
 import { WebsiteEditor, type EditorSection } from "@/components/admin/WebsiteEditor";
 
 export default async function EditPageScreen(props: PageProps<"/admin/editor/[slug]">) {
-  await requireAdmin();
   const { slug } = await props.params;
 
-  const [draft, categories] = await Promise.all([
-    getDraftPage(slug),
-    prisma.category.findMany({
-      orderBy: [{ position: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, parentId: true },
-    }),
-  ]);
+  const draft = getDraftPage(slug);
+  const categories = allCategories();
 
   if (!draft) notFound();
 

@@ -1,32 +1,15 @@
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { allCategories, productCount } from "@/lib/catalog";
 import { AdminPage, PageHeader } from "@/components/admin/ui";
 import { CategoryManager, type CategoryNode } from "@/components/admin/CategoryManager";
 
 export default async function AdminCategoriesPage() {
-  await requireAdmin();
-
-  const categories = await prisma.category.findMany({
-    orderBy: [{ position: "asc" }, { name: "asc" }],
-    include: { _count: { select: { products: true } } },
-  });
 
   const byId = new Map(
-    categories.map((category) => [
+    allCategories().map((category) => [
       category.id,
       {
-        id: category.id,
-        name: category.name,
-        slug: category.slug,
-        description: category.description,
-        imageUrl: category.imageUrl,
-        imageAlt: category.imageAlt,
-        parentId: category.parentId,
-        isFeatured: category.isFeatured,
-        isActive: category.isActive,
-        seoTitle: category.seoTitle,
-        seoDescription: category.seoDescription,
-        productCount: category._count.products,
+        ...category,
+        productCount: productCount(category.id, false),
         children: [] as CategoryNode[],
       } satisfies CategoryNode,
     ]),

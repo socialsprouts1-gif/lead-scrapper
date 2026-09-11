@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { ProductCard } from "@/components/storefront/ProductCard";
-import type { ProductCard as ProductCardData } from "@/lib/catalog";
+import type { Product } from "@/lib/types";
 
 export function ProductGridBlock({
   products,
   columns,
   wishlist,
 }: {
-  products: ProductCardData[];
+  products: Product[];
   columns: number;
   wishlist: string[];
 }) {
@@ -43,7 +43,7 @@ export function ProductCarouselBlock({
   products,
   wishlist,
 }: {
-  products: ProductCardData[];
+  products: Product[];
   wishlist: string[];
 }) {
   return (

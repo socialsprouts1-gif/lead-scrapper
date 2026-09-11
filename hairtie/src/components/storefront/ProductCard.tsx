@@ -9,23 +9,24 @@ import { toggleWishlist } from "@/app/actions/wishlist";
 import { useToast } from "@/components/ui/Toast";
 import { Price } from "@/components/ui/Price";
 import { Spinner } from "@/components/ui/Spinner";
-import type { ProductCard as ProductCardData } from "@/lib/catalog";
+import type { Product } from "@/lib/types";
 
 type Props = {
-  product: ProductCardData;
+  product: Product;
   wishlisted?: boolean;
   priority?: boolean;
   onQuickView?: (slug: string) => void;
   sizes?: string;
 };
 
-function badgesFor(product: ProductCardData) {
+function badgesFor(product: Product) {
   const badges: { label: string; bg: string; color: string }[] = [];
-  const stock = product.trackInventory
-    ? product.variants.length
-      ? product.variants.reduce((s, v) => s + v.stock, 0)
-      : product.stock
-    : Number.MAX_SAFE_INTEGER;
+  const active = product.variants.filter((variant) => variant.isActive);
+  const stock = !product.trackInventory
+    ? Number.MAX_SAFE_INTEGER
+    : active.length
+      ? active.reduce((sum, variant) => sum + variant.stock, 0)
+      : product.stock;
 
   if (stock <= 0) badges.push({ label: "Sold out", bg: "rgba(47,41,37,0.85)", color: "#fdfaf6" });
   else {
@@ -47,18 +48,15 @@ export function ProductCard({ product, wishlisted = false, priority, onQuickView
 
   const image = product.images[0];
   const hoverImage = product.images[1];
+  const options = product.variants.filter((variant) => variant.isActive);
   const badges = badgesFor(product);
   const soldOut = badges.some((b) => b.label === "Sold out");
-  const needsChoice = product.variants.length > 1;
+  const needsChoice = options.length > 1;
 
   function onWishlist(event: React.MouseEvent) {
     event.preventDefault();
     startTransition(async () => {
       const result = await toggleWishlist(product.id);
-      if (result.requiresLogin) {
-        show(result.message ?? "Please sign in.", "error");
-        return;
-      }
       if (result.ok) {
         setSaved(Boolean(result.active));
         show(result.message ?? "");
@@ -149,10 +147,7 @@ export function ProductCard({ product, wishlisted = false, priority, onQuickView
       </Link>
 
       <div className="pt-3.5">
-        {product.category && (
-          <p className="ht-eyebrow mb-1 text-[0.62rem]">{product.category.name}</p>
-        )}
-        <h3 className="text-[0.95rem] leading-snug">
+                <h3 className="text-[0.95rem] leading-snug">
           <Link href={`/products/${product.slug}`} className="ht-underline">
             {product.name}
           </Link>
@@ -182,9 +177,9 @@ export function ProductCard({ product, wishlisted = false, priority, onQuickView
               </button>
             ))}
         </div>
-        {product.variants.length > 1 && (
+        {options.length > 1 && (
           <div className="mt-2 flex items-center gap-1.5">
-            {product.variants.slice(0, 5).map((variant) => (
+            {options.slice(0, 5).map((variant) => (
               <span
                 key={variant.id}
                 title={variant.color ?? variant.name}
@@ -195,9 +190,9 @@ export function ProductCard({ product, wishlisted = false, priority, onQuickView
                 }}
               />
             ))}
-            {product.variants.length > 5 && (
+            {options.length > 5 && (
               <span className="text-[0.65rem]" style={{ color: "var(--ht-muted)" }}>
-                +{product.variants.length - 5}
+                +{options.length - 5}
               </span>
             )}
           </div>

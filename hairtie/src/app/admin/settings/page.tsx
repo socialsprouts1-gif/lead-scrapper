@@ -1,4 +1,3 @@
-import { requireAdmin } from "@/lib/auth";
 import { getSiteSettings } from "@/lib/settings";
 import { razorpayConfigured } from "@/lib/razorpay";
 import { mediaDriver } from "@/lib/storage";
@@ -6,7 +5,6 @@ import { AdminPage, PageHeader } from "@/components/admin/ui";
 import { SettingsForm } from "@/components/admin/SettingsForm";
 
 export default async function AdminSettingsPage() {
-  await requireAdmin();
   const settings = await getSiteSettings();
 
   const integrations = [

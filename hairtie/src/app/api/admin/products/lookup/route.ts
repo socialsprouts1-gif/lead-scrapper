@@ -1,35 +1,22 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { getAdminOrNull } from "@/lib/auth";
+import { liveProducts, productsByIds, allProducts } from "@/lib/catalog";
 
 export async function GET(request: Request) {
-  if (!(await getAdminOrNull())) return NextResponse.json({ message: "Not authorised." }, { status: 401 });
-
   const { searchParams } = new URL(request.url);
   const ids = searchParams.get("ids")?.split(",").filter(Boolean);
-  const q = searchParams.get("q")?.trim();
+  const q = searchParams.get("q")?.trim().toLowerCase();
 
-  const products = await prisma.product.findMany({
-    where: ids?.length
-      ? { id: { in: ids } }
-      : q
-        ? {
-            status: { not: "ARCHIVED" },
-            OR: [
-              { name: { contains: q, mode: "insensitive" } },
-              { sku: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : { status: "ACTIVE" },
-    take: 20,
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      price: true,
-      images: { orderBy: { position: "asc" }, take: 1, select: { url: true } },
-    },
-  });
+  const products = ids?.length
+    ? productsByIds(ids)
+    : q
+      ? allProducts()
+          .filter(
+            (product) =>
+              product.status !== "ARCHIVED" &&
+              (product.name.toLowerCase().includes(q) || product.sku.toLowerCase().includes(q)),
+          )
+          .slice(0, 20)
+      : liveProducts().slice(0, 20);
 
   return NextResponse.json({
     products: products.map((product) => ({

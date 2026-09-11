@@ -1,77 +1,51 @@
 import Link from "next/link";
 import Image from "next/image";
 import { AlertTriangle, ArrowRight, Package, Sparkles } from "lucide-react";
-import { prisma } from "@/lib/db";
-import type { Prisma } from "@/generated/prisma/client";
-import { requireAdmin } from "@/lib/auth";
+import { allProducts, liveProducts, stockOf } from "@/lib/catalog";
+import { allOrders, customerSummaries } from "@/lib/orders";
+import { pendingReviewCount } from "@/lib/reviews";
 import { formatPaise } from "@/lib/money";
 import { daysAgo } from "@/lib/dates";
 import { formatDate } from "@/lib/utils";
-import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/orders";
+import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/order-status";
 import { AdminPage, EmptyState, PageHeader, Pill, StatCard } from "@/components/admin/ui";
 
-export default async function AdminDashboard() {
-  const user = await requireAdmin();
+export default function AdminDashboard() {
+  const orders = allOrders();
+  const counted = orders.filter(
+    (order) => !["CANCELLED", "RETURNED", "REFUNDED"].includes(order.status),
+  );
 
-  const thirtyDaysAgo = daysAgo(30);
-  const paidOrder = { status: { notIn: ["CANCELLED", "RETURNED", "REFUNDED"] } } satisfies Prisma.OrderWhereInput;
+  const since = daysAgo(30);
+  const recent = counted.filter((order) => new Date(order.placedAt) >= since);
 
-  const [
-    salesAllTime,
-    sales30,
-    orderCount,
-    pendingCount,
-    customerCount,
-    productCount,
-    draftCount,
-    lowStock,
-    recentOrders,
-    bestSellers,
-    pendingReviews,
-  ] = await Promise.all([
-    prisma.order.aggregate({ where: paidOrder, _sum: { total: true } }),
-    prisma.order.aggregate({
-      where: { ...paidOrder, placedAt: { gte: thirtyDaysAgo } },
-      _sum: { total: true },
-      _count: true,
-    }),
-    prisma.order.count(),
-    prisma.order.count({ where: { status: { in: ["PENDING", "CONFIRMED"] } } }),
-    prisma.user.count({ where: { role: "CUSTOMER" } }),
-    prisma.product.count({ where: { status: "ACTIVE" } }),
-    prisma.product.count({ where: { status: "DRAFT" } }),
-    prisma.$queryRaw<{ id: string; name: string; slug: string; stock: number; lowStockThreshold: number }[]>`
-      SELECT id, name, slug, stock, "lowStockThreshold"
-      FROM "Product"
-      WHERE status = 'ACTIVE' AND "trackInventory" = true AND stock <= "lowStockThreshold"
-      ORDER BY stock ASC
-      LIMIT 8`,
-    prisma.order.findMany({
-      orderBy: { placedAt: "desc" },
-      take: 6,
-      select: {
-        id: true, orderNumber: true, customerName: true, total: true,
-        status: true, placedAt: true, paymentStatus: true,
-      },
-    }),
-    prisma.product.findMany({
-      where: { status: "ACTIVE", salesCount: { gt: 0 } },
-      orderBy: { salesCount: "desc" },
-      take: 5,
-      select: {
-        id: true, name: true, slug: true, salesCount: true, price: true, stock: true,
-        images: { orderBy: { position: "asc" }, take: 1, select: { url: true } },
-      },
-    }),
-    prisma.review.count({ where: { status: "PENDING" } }),
-  ]);
+  const salesAllTime = counted.reduce((sum, order) => sum + order.total, 0);
+  const sales30 = recent.reduce((sum, order) => sum + order.total, 0);
+  const pendingCount = orders.filter((order) => ["PENDING", "CONFIRMED"].includes(order.status)).length;
 
-  const firstName = user.name.split(" ")[0];
+  const products = allProducts();
+  const productCount = liveProducts().length;
+  const draftCount = products.filter((product) => product.status === "DRAFT").length;
+  const customerCount = customerSummaries().length;
+  const pendingReviews = pendingReviewCount();
+
+  const lowStock = products
+    .filter((product) => product.status === "ACTIVE" && product.trackInventory)
+    .map((product) => ({ ...product, available: stockOf(product) }))
+    .filter((product) => product.available <= product.lowStockThreshold)
+    .sort((a, b) => a.available - b.available)
+    .slice(0, 8);
+
+  const recentOrders = orders.slice(0, 6);
+  const bestSellers = products
+    .filter((product) => product.status === "ACTIVE" && product.salesCount > 0)
+    .sort((a, b) => b.salesCount - a.salesCount)
+    .slice(0, 5);
 
   return (
     <AdminPage>
       <PageHeader
-        title={`Welcome back, ${firstName}`}
+        title="Your shop today"
         description="Here's how the shop is doing. Everything on this page links to where you can act on it."
       >
         <Link href="/admin/products/new" className="adm-btn adm-btn-primary">
@@ -82,14 +56,14 @@ export default async function AdminDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Sales (30 days)"
-          value={formatPaise(sales30._sum.total ?? 0)}
-          hint={`${sales30._count} ${sales30._count === 1 ? "order" : "orders"}`}
+          value={formatPaise(sales30)}
+          hint={`${recent.length} ${recent.length === 1 ? "order" : "orders"}`}
           href="/admin/analytics"
         />
         <StatCard
           label="Total sales"
-          value={formatPaise(salesAllTime._sum.total ?? 0)}
-          hint={`${orderCount} orders all time`}
+          value={formatPaise(salesAllTime)}
+          hint={`${orders.length} orders all time`}
           href="/admin/orders"
         />
         <StatCard
@@ -120,8 +94,8 @@ export default async function AdminDashboard() {
                     <Link href={`/admin/products/${product.id}`} className="truncate underline underline-offset-2">
                       {product.name}
                     </Link>
-                    <span style={{ color: product.stock === 0 ? "#9c3a3a" : "#b4762f" }}>
-                      {product.stock === 0 ? "Sold out" : `${product.stock} left`}
+                    <span style={{ color: product.available === 0 ? "#9c3a3a" : "#b4762f" }}>
+                      {product.available === 0 ? "Sold out" : `${product.available} left`}
                     </span>
                   </li>
                 ))}
@@ -232,7 +206,7 @@ export default async function AdminDashboard() {
                       {product.name}
                     </Link>
                     <p className="text-xs" style={{ color: "var(--adm-muted)" }}>
-                      {product.salesCount} sold · {product.stock} in stock
+                      {product.salesCount} sold · {stockOf(product)} in stock
                     </p>
                   </div>
                 </li>

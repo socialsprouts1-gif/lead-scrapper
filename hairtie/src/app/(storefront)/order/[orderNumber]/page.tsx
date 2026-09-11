@@ -3,12 +3,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check, Package } from "lucide-react";
-import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
 import { getSiteSettings } from "@/lib/settings";
 import { formatPaise } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
-import { ORDER_STATUS_FLOW, ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/orders";
+import { ORDER_STATUS_FLOW, ORDER_STATUS_LABELS, ORDER_STATUS_TONE, orderByNumber } from "@/lib/orders";
 import { whatsappLink } from "@/lib/whatsapp";
 import { WhatsappIcon } from "@/components/ui/BrandIcons";
 
@@ -22,25 +20,15 @@ export default async function OrderPage(props: PageProps<"/order/[orderNumber]">
   const search = await props.searchParams;
   const justPlaced = search.placed === "1";
 
-  const [order, user, settings] = await Promise.all([
-    prisma.order.findUnique({
-      where: { orderNumber },
-      include: {
-        items: true,
-        events: { orderBy: { createdAt: "asc" } },
-      },
-    }),
-    getCurrentUser(),
-    getSiteSettings(),
-  ]);
+  const order = orderByNumber(orderNumber);
+  const settings = getSiteSettings();
 
   if (!order) notFound();
 
-  // The order number doubles as the access token for guest checkout, so this
-  // page is reachable with the link we email. That only holds because order
-  // numbers carry six random characters (see generateOrderNumber) rather than
-  // running in sequence. Signed-in customers and staff reach it either way.
-  void user;
+  // The order number doubles as the access token: this page is reachable with
+  // the link the customer is given. That only holds because order numbers carry
+  // six random characters (see generateOrderNumber) rather than running in
+  // sequence.
 
   const tone = ORDER_STATUS_TONE[order.status];
   const currentStep = ORDER_STATUS_FLOW.indexOf(order.status);

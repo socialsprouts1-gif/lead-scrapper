@@ -11,7 +11,7 @@ type Facets = {
   tags: { name: string; slug: string }[];
   minPrice: number;
   maxPrice: number;
-  categories: { id: string; name: string; slug: string; parentId: string | null; _count: { products: number } }[];
+  categories: { id: string; name: string; slug: string; parentId: string | null; productCount: number }[];
 };
 
 export function ShopFilters({
@@ -76,7 +76,7 @@ export function ShopFilters({
               <div key={parent.id}>
                 <FilterRow
                   label={parent.name}
-                  count={parent._count.products}
+                  count={parent.productCount}
                   checked={activeCategory === parent.slug}
                   onChange={() => update({ category: activeCategory === parent.slug ? null : parent.slug })}
                 />
@@ -87,7 +87,7 @@ export function ShopFilters({
                       <FilterRow
                         key={child.id}
                         label={child.name}
-                        count={child._count.products}
+                        count={child.productCount}
                         checked={activeCategory === child.slug}
                         onChange={() => update({ category: activeCategory === child.slug ? null : child.slug })}
                       />

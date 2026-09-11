@@ -1,9 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
-import type { Prisma } from "@/generated/prisma/client";
+import { allReviews } from "@/lib/reviews";
+import { productById } from "@/lib/catalog";
 import { formatDate } from "@/lib/utils";
 import { AdminPage, EmptyState, PageHeader, Pagination } from "@/components/admin/ui";
 import { FilterSelect, SearchInput } from "@/components/admin/Controls";
@@ -19,46 +18,36 @@ const TONE = {
 };
 
 export default async function AdminReviewsPage(props: PageProps<"/admin/reviews">) {
-  await requireAdmin();
   const params = await props.searchParams;
 
   const q = typeof params.q === "string" ? params.q.trim() : "";
   const status = typeof params.status === "string" ? params.status : "";
   const page = Math.max(Number(params.page ?? 1), 1);
 
-  const and: Prisma.ReviewWhereInput[] = [];
-  if (q) {
-    and.push({
-      OR: [
-        { authorName: { contains: q, mode: "insensitive" } },
-        { body: { contains: q, mode: "insensitive" } },
-        { product: { name: { contains: q, mode: "insensitive" } } },
-      ],
-    });
-  }
-  if (status) and.push({ status: status as Prisma.ReviewWhereInput["status"] });
-  const where: Prisma.ReviewWhereInput = and.length ? { AND: and } : {};
+  const everything = allReviews().map((review) => ({
+    ...review,
+    product: productById(review.productId),
+  }));
+  const term = q.toLowerCase();
 
-  const [reviews, total, counts] = await Promise.all([
-    prisma.review.findMany({
-      where,
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-      skip: (page - 1) * PER_PAGE,
-      take: PER_PAGE,
-      include: {
-        product: {
-          select: {
-            id: true, name: true, slug: true,
-            images: { orderBy: { position: "asc" }, take: 1, select: { url: true } },
-          },
-        },
-      },
-    }),
-    prisma.review.count({ where }),
-    prisma.review.groupBy({ by: ["status"], _count: true }),
-  ]);
+  const matched = everything
+    .filter((review) => {
+      if (q) {
+        const hit =
+          review.authorName.toLowerCase().includes(term) ||
+          review.body.toLowerCase().includes(term) ||
+          (review.product?.name.toLowerCase().includes(term) ?? false);
+        if (!hit) return false;
+      }
+      if (status && review.status !== status) return false;
+      return true;
+    })
+    // Pending reviews first — they are the ones needing attention.
+    .sort((a, b) => Number(b.status === "PENDING") - Number(a.status === "PENDING"));
 
-  const pending = counts.find((c) => c.status === "PENDING")?._count ?? 0;
+  const total = matched.length;
+  const reviews = matched.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const pending = everything.filter((review) => review.status === "PENDING").length;
   const pageCount = Math.ceil(total / PER_PAGE);
 
   function hrefFor(target: number) {
@@ -110,15 +99,19 @@ export default async function AdminReviewsPage(props: PageProps<"/admin/reviews"
                 <article key={review.id} className="adm-card p-5">
                   <div className="flex flex-wrap items-start gap-4">
                     <div className="relative h-14 w-12 shrink-0 overflow-hidden rounded-md" style={{ background: "var(--adm-bg)" }}>
-                      {review.product.images[0] && (
+                      {review.product?.images[0] && (
                         <Image src={review.product.images[0].url} alt="" fill sizes="50px" className="object-cover" />
                       )}
                     </div>
 
                     <div className="min-w-[14rem] flex-1">
-                      <Link href={`/admin/products/${review.product.id}`} className="text-sm underline underline-offset-2">
-                        {review.product.name}
-                      </Link>
+                      {review.product ? (
+                        <Link href={`/admin/products/${review.product.id}`} className="text-sm underline underline-offset-2">
+                          {review.product.name}
+                        </Link>
+                      ) : (
+                        <span className="text-sm" style={{ color: "var(--adm-muted)" }}>Deleted product</span>
+                      )}
                       <div className="mt-1 flex items-center gap-2">
                         <Stars rating={review.rating} size={13} />
                         <span className="adm-pill" style={{ background: tone.bg, color: tone.color }}>

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { prisma } from "@/lib/db";
+import { allCategories, productCount } from "@/lib/catalog";
 import { getSiteSettings } from "@/lib/settings";
 import { buildMetadata, resolveSiteUrl } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getSiteSettings();
+  const settings = getSiteSettings();
   const siteUrl = await resolveSiteUrl(settings);
   return buildMetadata({
     settings,
@@ -19,18 +19,16 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function CategoriesPage() {
-  const categories = await prisma.category.findMany({
-    where: { isActive: true, parentId: null },
-    orderBy: [{ position: "asc" }, { name: "asc" }],
-    include: {
-      children: {
-        where: { isActive: true },
-        orderBy: [{ position: "asc" }, { name: "asc" }],
-        include: { _count: { select: { products: { where: { status: "ACTIVE" } } } } },
-      },
-      _count: { select: { products: { where: { status: "ACTIVE" } } } },
-    },
-  });
+  const active = allCategories().filter((category) => category.isActive);
+  const categories = active
+    .filter((category) => !category.parentId)
+    .map((category) => ({
+      ...category,
+      productCount: productCount(category.id),
+      children: active
+        .filter((child) => child.parentId === category.id)
+        .map((child) => ({ ...child, productCount: productCount(child.id) })),
+    }));
 
   return (
     <div className="ht-container py-10 md:py-16">
@@ -81,7 +79,7 @@ export default async function CategoriesPage() {
                     <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(38,32,28,0.5), transparent 55%)" }} />
                     <div className="absolute inset-x-4 bottom-4 text-white">
                       <p className="font-serif text-lg leading-tight md:text-xl">{entry.name}</p>
-                      <p className="text-xs opacity-85">{entry._count.products} pieces</p>
+                      <p className="text-xs opacity-85">{entry.productCount} pieces</p>
                     </div>
                   </div>
                 </Link>

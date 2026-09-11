@@ -3,7 +3,7 @@ import { getSiteSettings } from "@/lib/settings";
 import { resolveSiteUrl } from "@/lib/seo";
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
-  const settings = await getSiteSettings();
+  const settings = getSiteSettings();
   const base = await resolveSiteUrl(settings);
 
   return {
@@ -12,7 +12,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         userAgent: "*",
         allow: "/",
         // Private and transactional pages carry nothing worth indexing.
-        disallow: ["/admin", "/api", "/account", "/cart", "/checkout", "/order/", "/wishlist"],
+        disallow: ["/admin", "/api", "/preview", "/cart", "/checkout", "/order/", "/wishlist"],
       },
     ],
     sitemap: `${base}/sitemap.xml`,

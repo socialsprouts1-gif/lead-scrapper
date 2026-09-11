@@ -1,8 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, MapPin, Clock, Phone } from "lucide-react";
-import { prisma } from "@/lib/db";
-import { productsForSection } from "@/lib/catalog";
+import { allCategories, productsByIds, productsForSection } from "@/lib/catalog";
+import { activeLooks } from "@/lib/looks";
 import { withDefaults } from "@/lib/sections";
 import { formatPaise } from "@/lib/money";
 import { whatsappLink } from "@/lib/whatsapp";
@@ -37,7 +37,7 @@ function list(value: unknown): Record<string, unknown>[] {
 }
 
 /** Renders a full page of blocks. */
-export async function SectionList({
+export function SectionList({
   sections,
   context,
 }: {
@@ -54,7 +54,7 @@ export async function SectionList({
   );
 }
 
-export async function SectionBlock({
+export function SectionBlock({
   section,
   context,
 }: {
@@ -178,8 +178,8 @@ function Hero({ s }: { s: S }) {
   );
 }
 
-async function ProductGridSection({ s, context }: { s: S; context: RenderContext }) {
-  const products = await productsForSection(s);
+function ProductGridSection({ s, context }: { s: S; context: RenderContext }) {
+  const products = productsForSection(s);
   if (products.length === 0) return null;
   return (
     <section className="ht-section">
@@ -197,8 +197,8 @@ async function ProductGridSection({ s, context }: { s: S; context: RenderContext
   );
 }
 
-async function ProductCarouselSection({ s, context }: { s: S; context: RenderContext }) {
-  const products = await productsForSection(s);
+function ProductCarouselSection({ s, context }: { s: S; context: RenderContext }) {
+  const products = productsForSection(s);
   if (products.length === 0) return null;
   return (
     <section className="ht-section">
@@ -216,13 +216,10 @@ async function ProductCarouselSection({ s, context }: { s: S; context: RenderCon
   );
 }
 
-async function CategoryGridSection({ s }: { s: S }) {
-  const categories = await prisma.category.findMany({
-    where: { isActive: true, ...(s.featuredOnly ? { isFeatured: true } : {}) },
-    orderBy: [{ position: "asc" }, { name: "asc" }],
-    take: Math.min(num(s.limit, 8), 16),
-    select: { id: true, name: true, slug: true, imageUrl: true, imageAlt: true },
-  });
+function CategoryGridSection({ s }: { s: S }) {
+  const categories = allCategories()
+    .filter((category) => category.isActive && (!s.featuredOnly || category.isFeatured))
+    .slice(0, Math.min(num(s.limit, 8), 16));
   if (categories.length === 0) return null;
 
   const circle = str(s.style, "card") === "circle";
@@ -372,27 +369,8 @@ function ImageText({ s }: { s: S }) {
   );
 }
 
-async function ShopTheLook({ s }: { s: S }) {
-  const looks = await prisma.look.findMany({
-    where: { isActive: true },
-    orderBy: { position: "asc" },
-    take: Math.min(num(s.limit, 3), 6),
-    include: {
-      products: {
-        orderBy: { position: "asc" },
-        include: {
-          product: {
-            select: {
-              slug: true,
-              name: true,
-              price: true,
-              images: { orderBy: { position: "asc" }, take: 1, select: { url: true } },
-            },
-          },
-        },
-      },
-    },
-  });
+function ShopTheLook({ s }: { s: S }) {
+  const looks = activeLooks().slice(0, Math.min(num(s.limit, 3), 6));
   if (looks.length === 0) return null;
 
   return (
@@ -419,9 +397,9 @@ async function ShopTheLook({ s }: { s: S }) {
                 </p>
               )}
               <div className="mt-3 flex flex-col gap-2">
-                {look.products.map(({ product }) => (
+                {productsByIds(look.productIds).map((product) => (
                   <ProductChip
-                    key={product.slug}
+                    key={product.id}
                     product={{
                       slug: product.slug,
                       name: `${product.name} · ${formatPaise(product.price)}`,

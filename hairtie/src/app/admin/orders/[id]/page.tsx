@@ -1,40 +1,29 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
 import { formatPaise } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
-import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/orders";
+import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE, allOrders, orderById } from "@/lib/orders";
 import { getSiteSettings } from "@/lib/settings";
 import { whatsappLink } from "@/lib/whatsapp";
 import { AdminPage, PageHeader, Pill } from "@/components/admin/ui";
 import { OrderActions } from "@/components/admin/OrderActions";
 
 export default async function AdminOrderPage(props: PageProps<"/admin/orders/[id]">) {
-  await requireAdmin();
   const { id } = await props.params;
 
-  const [order, settings] = await Promise.all([
-    prisma.order.findUnique({
-      where: { id },
-      include: {
-        items: true,
-        events: { orderBy: { createdAt: "desc" } },
-        user: { select: { id: true, name: true, email: true } },
-      },
-    }),
-    getSiteSettings(),
-  ]);
+  const order = orderById(id);
+  const settings = getSiteSettings();
 
   if (!order) notFound();
 
-  const previousOrders = await prisma.order.count({
-    where: {
-      id: { not: order.id },
-      OR: [{ customerEmail: order.customerEmail }, { customerPhone: order.customerPhone }],
-    },
-  });
+  const previousOrders = allOrders().filter(
+    (entry) =>
+      entry.id !== order.id &&
+      (entry.customerEmail === order.customerEmail || entry.customerPhone === order.customerPhone),
+  ).length;
+
+  const events = [...order.events].reverse();
 
   const tone = ORDER_STATUS_TONE[order.status];
 
@@ -118,16 +107,12 @@ export default async function AdminOrderPage(props: PageProps<"/admin/orders/[id
                 <a href={`mailto:${order.customerEmail}`} className="underline underline-offset-2">{order.customerEmail}</a>
               </p>
               <p className="mt-3 text-xs" style={{ color: "var(--adm-muted)" }}>
-                {order.user ? (
-                  <>
-                    Has an account ·{" "}
-                    <Link href={`/admin/customers/${order.user.id}`} className="underline underline-offset-2">
-                      See customer
-                    </Link>
-                  </>
-                ) : (
-                  "Checked out as a guest"
-                )}
+                <Link
+                  href={`/admin/customers/${encodeURIComponent(order.customerEmail.toLowerCase())}`}
+                  className="underline underline-offset-2"
+                >
+                  See all their orders
+                </Link>
                 {previousOrders > 0 && ` · ${previousOrders} previous ${previousOrders === 1 ? "order" : "orders"}`}
               </p>
             </div>
@@ -154,7 +139,7 @@ export default async function AdminOrderPage(props: PageProps<"/admin/orders/[id
           <div className="adm-card p-5">
             <h2 className="mb-3 text-base">History</h2>
             <ol className="space-y-3 text-sm">
-              {order.events.map((event) => (
+              {events.map((event) => (
                 <li key={event.id} className="flex gap-3">
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--adm-accent)" }} />
                   <div>

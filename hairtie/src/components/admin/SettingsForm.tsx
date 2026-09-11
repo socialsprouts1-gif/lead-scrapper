@@ -310,7 +310,6 @@ export function SettingsForm({ initial }: { initial: SiteSettings }) {
               {([
                 ["showSearch", "Show the search icon"],
                 ["showWishlist", "Show the wishlist icon"],
-                ["showAccount", "Show the account icon"],
                 ["showCart", "Show the bag icon"],
               ] as const).map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2.5 text-sm">

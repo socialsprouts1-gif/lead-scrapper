@@ -4,12 +4,12 @@ import { Suspense } from "react";
 import { searchProducts, getShopFacets } from "@/lib/catalog";
 import { getSiteSettings } from "@/lib/settings";
 import { buildMetadata, resolveSiteUrl } from "@/lib/seo";
-import { getWishlistIds } from "@/app/actions/wishlist";
+import { getWishlistIds } from "@/lib/wishlist";
 import { ShopFilters } from "@/components/storefront/ShopFilters";
 import { ProductGridBlock } from "@/components/sections/ProductRow";
 
 export async function generateMetadata(props: PageProps<"/shop">): Promise<Metadata> {
-  const settings = await getSiteSettings();
+  const settings = getSiteSettings();
   const siteUrl = await resolveSiteUrl(settings);
   const params = await props.searchParams;
   const q = typeof params.q === "string" ? params.q : "";
@@ -48,11 +48,9 @@ export default async function ShopPage(props: PageProps<"/shop">) {
     page: Number(first(params.page) ?? 1),
   };
 
-  const [{ products, total, page, pageCount }, facets, wishlist] = await Promise.all([
-    searchProducts(filters),
-    getShopFacets(),
-    getWishlistIds(),
-  ]);
+  const { products, total, page, pageCount } = searchProducts(filters);
+  const facets = getShopFacets();
+  const wishlist = await getWishlistIds();
 
   const searchString = new URLSearchParams(
     Object.entries(params).flatMap(([key, value]) =>
@@ -125,11 +123,11 @@ export default async function ShopPage(props: PageProps<"/shop">) {
 }
 
 /* ShopFilters reads the URL with useSearchParams, so it needs a Suspense boundary. */
-async function FilterColumn({
+function FilterColumn({
   facets,
   total,
 }: {
-  facets: Awaited<ReturnType<typeof getShopFacets>>;
+  facets: ReturnType<typeof getShopFacets>;
   total: number;
 }) {
   return <ShopFilters facets={facets} total={total} />;
