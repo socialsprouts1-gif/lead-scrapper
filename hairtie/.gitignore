@@ -1,0 +1,22 @@
+node_modules/
+.next/
+.next-profiles/
+out/
+build/
+dist/
+
+
+# The shop's data file — products, orders and page edits live here.
+# It is recreated from the demo content on first run.
+.data/
+
+# Uploaded media (local media driver)
+public/uploads/
+
+.env
+.env*.local
+.DS_Store
+*.pem
+npm-debug.log*
+next-env.d.ts
+tsconfig.tsbuildinfo

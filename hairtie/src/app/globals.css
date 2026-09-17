@@ -1,0 +1,395 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Hairtie design tokens.
+
+   Defaults live here; the values are overwritten at runtime by inline custom
+   properties written from the admin Appearance panel, so changing a colour or
+   a font in the admin instantly changes the whole storefront.
+--------------------------------------------------------------------------- */
+
+:root {
+  --ht-primary: #8d6a5b;
+  --ht-secondary: #f3d9d5;
+  --ht-bg: #fdfaf6;
+  --ht-surface: #ffffff;
+  --ht-text: #2f2925;
+  --ht-muted: #857b73;
+  --ht-button: #3a322d;
+  --ht-button-text: #fdfaf6;
+  --ht-border: #eae2d8;
+
+  --ht-heading-font: var(--font-cormorant), Georgia, serif;
+  --ht-body-font: var(--font-jost), system-ui, sans-serif;
+  --ht-heading-weight: 500;
+  --ht-heading-tracking: -0.01em;
+  --ht-base-size: 16px;
+
+  --ht-btn-radius: 999px;
+  --ht-btn-padding: 0.8rem 1.6rem;
+  --ht-radius: 16px;
+  --ht-content-width: 1280px;
+  --ht-section-gap: 4.5rem;
+  --ht-product-columns: 4;
+}
+
+@theme inline {
+  --color-ink: var(--ht-text);
+  --color-muted: var(--ht-muted);
+  --color-cream: var(--ht-bg);
+  --color-surface: var(--ht-surface);
+  --color-blush: var(--ht-secondary);
+  --color-clay: var(--ht-primary);
+  --color-line: var(--ht-border);
+  --font-serif: var(--ht-heading-font);
+  --font-sans: var(--ht-body-font);
+}
+
+* {
+  border-color: var(--ht-border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 6rem;
+}
+
+body {
+  background: var(--ht-bg);
+  color: var(--ht-text);
+  font-family: var(--ht-body-font);
+  font-size: var(--ht-base-size);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--ht-heading-font);
+  font-weight: var(--ht-heading-weight);
+  letter-spacing: var(--ht-heading-tracking);
+  line-height: 1.12;
+}
+
+/* --- Reusable primitives ------------------------------------------------- */
+
+.ht-container {
+  width: 100%;
+  max-width: var(--ht-content-width);
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .ht-container { padding-inline: 2rem; }
+}
+
+.ht-section {
+  padding-block: var(--ht-section-gap);
+}
+
+.ht-eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ht-muted);
+  font-weight: 500;
+}
+
+.ht-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: var(--ht-btn-padding);
+  border-radius: var(--ht-btn-radius);
+  font-size: 0.83rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 180ms ease, background-color 180ms ease, color 180ms ease,
+    border-color 180ms ease, opacity 180ms ease;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.ht-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ht-btn:not(:disabled):hover { transform: translateY(-1px); }
+.ht-btn:not(:disabled):active { transform: translateY(0); }
+
+.ht-btn-primary {
+  background: var(--ht-button);
+  color: var(--ht-button-text);
+}
+.ht-btn-primary:not(:disabled):hover { background: var(--ht-primary); }
+
+.ht-btn-outline {
+  background: transparent;
+  color: var(--ht-text);
+  border-color: color-mix(in srgb, var(--ht-text) 28%, transparent);
+}
+.ht-btn-outline:not(:disabled):hover {
+  background: var(--ht-text);
+  color: var(--ht-bg);
+  border-color: var(--ht-text);
+}
+
+.ht-btn-soft {
+  background: var(--ht-secondary);
+  color: var(--ht-text);
+}
+.ht-btn-soft:not(:disabled):hover { background: color-mix(in srgb, var(--ht-secondary) 70%, var(--ht-bg)); }
+
+.ht-btn-sm { padding: 0.55rem 1.05rem; font-size: 0.72rem; }
+
+.ht-card {
+  background: var(--ht-surface);
+  border-radius: var(--ht-radius);
+  border: 1px solid var(--ht-border);
+}
+
+.ht-input {
+  width: 100%;
+  background: var(--ht-surface);
+  border: 1px solid var(--ht-border);
+  border-radius: calc(var(--ht-radius) * 0.55);
+  padding: 0.75rem 0.95rem;
+  font-size: 0.92rem;
+  color: var(--ht-text);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.ht-input::placeholder { color: color-mix(in srgb, var(--ht-muted) 75%, transparent); }
+.ht-input:focus {
+  outline: none;
+  border-color: var(--ht-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ht-primary) 14%, transparent);
+}
+.ht-label {
+  display: block;
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ht-muted);
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+}
+
+.ht-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  line-height: 1;
+  backdrop-filter: blur(4px);
+}
+
+/* Product image hover: the second photo fades in. */
+.ht-product-media img { transition: opacity 500ms ease, transform 900ms cubic-bezier(0.22, 1, 0.36, 1); }
+.ht-product-card:hover .ht-product-media img.ht-primary-img { opacity: 0; }
+.ht-product-card:hover .ht-product-media img.ht-hover-img { opacity: 1; }
+.ht-product-card:hover .ht-product-media img { transform: scale(1.045); }
+
+@media (hover: none) {
+  .ht-product-card:hover .ht-product-media img.ht-primary-img { opacity: 1; }
+  .ht-product-card:hover .ht-product-media img { transform: none; }
+}
+
+.ht-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 260ms ease;
+}
+.ht-underline:hover { background-size: 100% 1px; }
+
+.ht-scroll-x {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ht-scroll-x::-webkit-scrollbar { display: none; }
+.ht-scroll-x > * { scroll-snap-align: start; flex: 0 0 auto; }
+
+/* A sticky buy bar takes the bottom-right corner on phones. */
+@media (max-width: 767px) {
+  body[data-sticky-bar="1"] .ht-whatsapp-float { display: none; }
+}
+
+.ht-fade-up {
+  animation: ht-fade-up 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ht-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Hide the page-builder's own chrome when rendering the real storefront. */
+.ht-prose p { margin-bottom: 1rem; }
+.ht-prose p:last-child { margin-bottom: 0; }
+.ht-prose ul { list-style: disc; padding-left: 1.25rem; margin-bottom: 1rem; }
+.ht-prose li { margin-bottom: 0.4rem; }
+.ht-prose h2 { font-size: 1.5rem; margin: 2rem 0 0.75rem; }
+.ht-prose h3 { font-size: 1.2rem; margin: 1.5rem 0 0.5rem; }
+.ht-prose a { color: var(--ht-primary); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------------------------------------------------------------------------
+   Admin panel.
+
+   Deliberately independent of the storefront theme tokens — changing the shop's
+   colours in Appearance must never make the admin hard to read.
+--------------------------------------------------------------------------- */
+
+.adm {
+  --adm-bg: #f7f6f3;
+  --adm-surface: #ffffff;
+  --adm-line: #e7e3dc;
+  --adm-text: #2e2a26;
+  --adm-muted: #7d766e;
+  --adm-accent: #8d6a5b;
+  --adm-accent-soft: #f5ece7;
+  background: var(--adm-bg);
+  color: var(--adm-text);
+  font-family: var(--font-jost), system-ui, sans-serif;
+}
+
+.adm h1, .adm h2, .adm h3 {
+  font-family: var(--font-jost), system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.adm-card {
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: 14px;
+}
+
+.adm-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--adm-text);
+  margin-bottom: 0.35rem;
+}
+
+.adm-hint {
+  font-size: 0.75rem;
+  color: var(--adm-muted);
+  margin-top: 0.3rem;
+}
+
+.adm-input,
+.adm select,
+.adm textarea {
+  width: 100%;
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: 9px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.88rem;
+  color: var(--adm-text);
+  font-family: inherit;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.adm-input:focus,
+.adm select:focus,
+.adm textarea:focus {
+  outline: none;
+  border-color: var(--adm-accent);
+  box-shadow: 0 0 0 3px rgba(141, 106, 91, 0.13);
+}
+
+.adm-input::placeholder { color: #aca69d; }
+.adm-input:disabled { background: #f4f2ee; color: var(--adm-muted); }
+
+.adm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 9px;
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+  white-space: nowrap;
+}
+.adm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.adm-btn-primary { background: var(--adm-text); color: #fff; }
+.adm-btn-primary:not(:disabled):hover { background: var(--adm-accent); }
+
+.adm-btn-ghost { background: var(--adm-surface); border-color: var(--adm-line); color: var(--adm-text); }
+.adm-btn-ghost:not(:disabled):hover { background: #f2efea; }
+
+.adm-btn-danger { background: #fff; border-color: #e3c4c4; color: #9c3a3a; }
+.adm-btn-danger:not(:disabled):hover { background: #fbf2f2; }
+
+.adm-btn-sm { padding: 0.38rem 0.7rem; font-size: 0.78rem; }
+
+.adm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.adm-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.adm-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--adm-muted);
+  font-weight: 600;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--adm-line);
+  white-space: nowrap;
+}
+.adm-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #f0ede7;
+  vertical-align: middle;
+}
+.adm-table tbody tr:last-child td { border-bottom: 0; }
+.adm-table tbody tr:hover { background: #faf9f6; }
+
+.adm-scroll { overflow-x: auto; }
+
+/* The visual editor's section outline on hover */
+.adm-editable { position: relative; }
+.adm-editable::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  transition: border-color 130ms ease, background-color 130ms ease;
+}
+.adm-editable:hover::after { border-color: var(--adm-accent); background: rgba(141, 106, 91, 0.05); }
