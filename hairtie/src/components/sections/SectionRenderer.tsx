@@ -32,8 +32,13 @@ function num(value: unknown, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
+/**
+ * Reads a repeater setting. Blocks the admin has hidden in the editor stay in
+ * the draft but are dropped here, so hiding a block never loses its content.
+ */
 function list(value: unknown): Record<string, unknown>[] {
-  return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+  if (!Array.isArray(value)) return [];
+  return (value as Record<string, unknown>[]).filter((item) => item?._hidden !== true);
 }
 
 /** Renders a full page of blocks. */
@@ -98,6 +103,12 @@ export function SectionBlock({
       return <TextSection s={s} />;
     case "customImage":
       return <CustomImage s={s} />;
+    case "columns":
+      return <FeatureColumns s={s} />;
+    case "gallery":
+      return <Gallery s={s} />;
+    case "announcement":
+      return <AnnouncementStrip s={s} />;
     case "spacer":
       return <div style={{ height: `${num(s.height, 48)}px` }} aria-hidden />;
     default:
@@ -767,6 +778,143 @@ function CustomImage({ s }: { s: S }) {
   return (
     <section className="ht-section">
       <div className={`ht-container ${width === "narrow" ? "max-w-3xl" : ""}`}>{inner}</div>
+    </section>
+  );
+}
+
+function FeatureColumns({ s }: { s: S }) {
+  const items = list(s.items);
+  if (items.length === 0) return null;
+  const columns = Math.min(Math.max(num(s.columns, 3), 2), 4);
+  const centered = str(s.align, "left") === "center";
+  const grid =
+    columns === 2 ? "sm:grid-cols-2" : columns === 4 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3";
+
+  return (
+    <section className="ht-section">
+      <div className="ht-container">
+        <SectionHeading heading={str(s.heading)} subheading={str(s.subheading)} />
+        <div className={`grid gap-6 md:gap-8 ${grid}`}>
+          {items.map((item, i) => (
+            <article key={i} className={centered ? "text-center" : ""}>
+              {str(item.imageUrl) && (
+                <div
+                  className="relative mb-5 overflow-hidden"
+                  style={{ borderRadius: "var(--ht-radius)", aspectRatio: "4 / 3" }}
+                >
+                  <Image
+                    src={str(item.imageUrl)}
+                    alt={str(item.title)}
+                    fill
+                    loading="lazy"
+                    sizes="(max-width: 640px) 100vw, 33vw"
+                    className="object-cover"
+                  />
+                </div>
+              )}
+              <h3 className="text-xl">{str(item.title)}</h3>
+              {str(item.body) && (
+                <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--ht-muted)" }}>
+                  {str(item.body)}
+                </p>
+              )}
+              {str(item.linkLabel) && (
+                <Link href={str(item.linkHref, "/shop")} className="ht-underline mt-4 inline-block text-sm">
+                  {str(item.linkLabel)}
+                </Link>
+              )}
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Gallery({ s }: { s: S }) {
+  const items = list(s.items).filter((item) => str(item.imageUrl));
+  if (items.length === 0) return null;
+
+  const columns = Math.min(Math.max(num(s.columns, 4), 2), 5);
+  const gridByColumns: Record<number, string> = {
+    2: "grid-cols-2",
+    3: "grid-cols-2 md:grid-cols-3",
+    4: "grid-cols-2 md:grid-cols-4",
+    5: "grid-cols-2 md:grid-cols-5",
+  };
+  const gaps: Record<string, string> = { tight: "gap-1.5", normal: "gap-3 md:gap-4", roomy: "gap-5 md:gap-7" };
+  const ratios: Record<string, string> = { square: "1 / 1", portrait: "3 / 4", landscape: "4 / 3" };
+  const ratio = ratios[str(s.shape, "square")] ?? "1 / 1";
+
+  return (
+    <section className="ht-section">
+      <div className="ht-container">
+        <SectionHeading heading={str(s.heading)} subheading={str(s.subheading)} />
+        <div className={`grid ${gridByColumns[columns]} ${gaps[str(s.gap, "normal")] ?? gaps.normal}`}>
+          {items.map((item, i) => {
+            const figure = (
+              <figure className="group">
+                <div
+                  className="relative overflow-hidden"
+                  style={{ borderRadius: "calc(var(--ht-radius) * 0.7)", aspectRatio: ratio }}
+                >
+                  <Image
+                    src={str(item.imageUrl)}
+                    alt={str(item.caption)}
+                    fill
+                    loading="lazy"
+                    sizes={`(max-width: 768px) 50vw, ${Math.round(100 / columns)}vw`}
+                    className="object-cover transition duration-700 group-hover:scale-[1.05]"
+                  />
+                </div>
+                {str(item.caption) && (
+                  <figcaption className="mt-2 text-[0.82rem]" style={{ color: "var(--ht-muted)" }}>
+                    {str(item.caption)}
+                  </figcaption>
+                )}
+              </figure>
+            );
+            return str(item.href) ? (
+              <Link key={i} href={str(item.href)}>
+                {figure}
+              </Link>
+            ) : (
+              <div key={i}>{figure}</div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AnnouncementStrip({ s }: { s: S }) {
+  const items = list(s.items).filter((item) => str(item.text));
+  if (items.length === 0) return null;
+
+  return (
+    <section
+      style={{ background: str(s.background, "#f3e3e0"), color: str(s.textColor, "#2f2925") }}
+    >
+      <div className="ht-container">
+        <div className="ht-scroll-x flex items-center justify-start gap-6 py-2.5 text-[0.82rem] md:justify-center">
+          {items.map((item, i) => {
+            const label = <span className="whitespace-nowrap">{str(item.text)}</span>;
+            return (
+              <span key={i} className="flex items-center gap-6">
+                {i > 0 && <span aria-hidden style={{ opacity: 0.35 }}>•</span>}
+                {str(item.href) ? (
+                  <Link href={str(item.href)} className="ht-underline whitespace-nowrap">
+                    {str(item.text)}
+                  </Link>
+                ) : (
+                  label
+                )}
+              </span>
+            );
+          })}
+        </div>
+      </div>
     </section>
   );
 }

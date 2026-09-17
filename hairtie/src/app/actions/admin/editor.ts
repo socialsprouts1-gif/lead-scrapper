@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createId, mutate, now, store } from "@/lib/store";
 import { getSectionDef, SECTION_REGISTRY } from "@/lib/sections";
-import { discardPageDraft, markPageDirty, newSection, publishPage, renumber } from "@/lib/pages";
+import { discardPageDraft, markPageDirty, newSection, publishPage } from "@/lib/pages";
 import { slugify } from "@/lib/utils";
 import type { AdminResult } from "@/app/actions/admin/products";
 
@@ -28,139 +28,32 @@ function findPage(pageId: string) {
   return store().pages.find((page) => page.id === pageId) ?? null;
 }
 
-export async function addSection(
+/**
+ * Replaces a page's whole draft in one go. This is what Undo/Redo posts: the
+ * editor keeps snapshots of the section list, so a single action can put back
+ * an order, a deleted section and a half-typed heading together.
+ */
+export async function replacePageSections(
   pageId: string,
-  type: string,
-  afterPosition?: number,
-): Promise<AdminResult<{ id: string }>> {
-  const def = getSectionDef(type);
-  if (!def) return { ok: false, message: "Unknown section type." };
-
-  const id = createId("sec");
-  const created = withPage(pageId, (page) => {
-    const insertAt = afterPosition === undefined ? page.sections.length : afterPosition + 1;
-    const section = newSection(type, insertAt, { ...def.defaults });
-    section.id = id;
-    for (const entry of page.sections) {
-      if (entry.position >= insertAt) entry.position += 1;
-    }
-    page.sections.push(section);
-    renumber(page.sections);
-    return true;
-  });
-
-  if (!created) return { ok: false, message: "That page no longer exists." };
-  return { ok: true, message: `${def.label} added.`, data: { id } };
-}
-
-export async function updateSection(sectionId: string, settings: unknown): Promise<AdminResult> {
-  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
-    return { ok: false, message: "Could not read those settings." };
+  sections: { id: string; type: string; isHidden: boolean; settings: Record<string, unknown> }[],
+): Promise<AdminResult> {
+  if (!Array.isArray(sections)) return { ok: false, message: "Could not read that change." };
+  if (sections.some((section) => !getSectionDef(section.type))) {
+    return { ok: false, message: "That change refers to a section type that no longer exists." };
   }
 
-  const ok = mutate((db) => {
-    for (const page of db.pages) {
-      const section = page.sections.find((entry) => entry.id === sectionId);
-      if (section) {
-        section.settings = settings as Record<string, unknown>;
-        markPageDirty(page);
-        return true;
-      }
-    }
-    return false;
-  });
-
-  return ok ? { ok: true, message: "Saved." } : { ok: false, message: "That section no longer exists." };
-}
-
-export async function reorderSections(pageId: string, orderedIds: string[]): Promise<AdminResult> {
   const ok = withPage(pageId, (page) => {
-    orderedIds.forEach((id, index) => {
-      const section = page.sections.find((entry) => entry.id === id);
-      if (section) section.position = index;
-    });
-    renumber(page.sections);
+    page.sections = sections.map((section, index) => ({
+      id: section.id,
+      type: section.type,
+      position: index,
+      isHidden: Boolean(section.isHidden),
+      settings: (section.settings ?? {}) as Record<string, unknown>,
+    }));
     return true;
   });
-  return ok ? { ok: true, message: "Order saved." } : { ok: false, message: "That page no longer exists." };
-}
 
-export async function moveSection(sectionId: string, direction: "up" | "down"): Promise<AdminResult> {
-  const ok = mutate((db) => {
-    for (const page of db.pages) {
-      const sorted = [...page.sections].sort((a, b) => a.position - b.position);
-      const index = sorted.findIndex((entry) => entry.id === sectionId);
-      if (index < 0) continue;
-      const target = direction === "up" ? index - 1 : index + 1;
-      if (target < 0 || target >= sorted.length) return true;
-      [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
-      sorted.forEach((section, position) => {
-        section.position = position;
-      });
-      markPageDirty(page);
-      return true;
-    }
-    return false;
-  });
-  return ok ? { ok: true, message: "Moved." } : { ok: false, message: "That section no longer exists." };
-}
-
-export async function duplicateSection(sectionId: string): Promise<AdminResult<{ id: string }>> {
-  const id = createId("sec");
-  const ok = mutate((db) => {
-    for (const page of db.pages) {
-      const section = page.sections.find((entry) => entry.id === sectionId);
-      if (!section) continue;
-      for (const entry of page.sections) {
-        if (entry.position > section.position) entry.position += 1;
-      }
-      page.sections.push({
-        ...structuredClone(section),
-        id,
-        position: section.position + 1,
-      });
-      renumber(page.sections);
-      markPageDirty(page);
-      return true;
-    }
-    return false;
-  });
-
-  return ok
-    ? { ok: true, message: "Section duplicated.", data: { id } }
-    : { ok: false, message: "That section no longer exists." };
-}
-
-export async function toggleSectionHidden(sectionId: string, hidden: boolean): Promise<AdminResult> {
-  const ok = mutate((db) => {
-    for (const page of db.pages) {
-      const section = page.sections.find((entry) => entry.id === sectionId);
-      if (!section) continue;
-      section.isHidden = hidden;
-      markPageDirty(page);
-      return true;
-    }
-    return false;
-  });
-  return ok
-    ? { ok: true, message: hidden ? "Section hidden." : "Section shown again." }
-    : { ok: false, message: "That section no longer exists." };
-}
-
-export async function deleteSection(sectionId: string): Promise<AdminResult> {
-  const ok = mutate((db) => {
-    for (const page of db.pages) {
-      if (!page.sections.some((entry) => entry.id === sectionId)) continue;
-      page.sections = page.sections.filter((entry) => entry.id !== sectionId);
-      renumber(page.sections);
-      markPageDirty(page);
-      return true;
-    }
-    return false;
-  });
-  return ok
-    ? { ok: true, message: "Section deleted." }
-    : { ok: false, message: "That section no longer exists." };
+  return ok ? { ok: true, message: "Done." } : { ok: false, message: "That page no longer exists." };
 }
 
 export async function publishPageChanges(slug: string): Promise<AdminResult> {

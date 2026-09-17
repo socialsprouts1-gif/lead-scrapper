@@ -34,7 +34,29 @@ export type FieldDef =
       fields: FieldDef[];
       max?: number;
       help?: string;
+      /** Emoji shown against each block in the editor tree. */
+      itemIcon?: string;
+      /** Which sub-field to use as the block's name in the tree. */
+      titleKey?: string;
     };
+
+/** The tabs the "Add a section" picker is grouped into. */
+export type SectionGroup =
+  | "Banners"
+  | "Products"
+  | "Content"
+  | "Media"
+  | "Trust & social"
+  | "Utility";
+
+export const SECTION_GROUPS: SectionGroup[] = [
+  "Banners",
+  "Products",
+  "Content",
+  "Media",
+  "Trust & social",
+  "Utility",
+];
 
 export type SectionDef = {
   type: string;
@@ -42,6 +64,13 @@ export type SectionDef = {
   description: string;
   /** Emoji used in the editor's "Add section" list — keeps the panel friendly. */
   icon: string;
+  group: SectionGroup;
+  /**
+   * The repeater field that behaves as this section's *blocks*: the editor
+   * shows those items as draggable rows nested under the section, the way a
+   * theme editor does, instead of burying them in the settings form.
+   */
+  blocksKey?: string;
   defaults: Record<string, unknown>;
   fields: FieldDef[];
 };
@@ -89,6 +118,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Hero banner",
     description: "Big opening image with a headline and buttons.",
     icon: "🖼️",
+    group: "Banners",
     defaults: {
       eyebrow: "New season",
       heading: "Style Your Everyday.",
@@ -142,6 +172,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Product grid",
     description: "A block of product cards, e.g. New Arrivals or Best Sellers.",
     icon: "🛍️",
+    group: "Products",
     defaults: {
       heading: "New Arrivals",
       subheading: "Fresh pieces, added this week.",
@@ -160,6 +191,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Product carousel",
     description: "Swipeable row of products — lovely on phones.",
     icon: "🎠",
+    group: "Products",
     defaults: {
       heading: "Trending Now",
       subheading: "The pieces everyone is reaching for.",
@@ -178,6 +210,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Category grid",
     description: "Visual cards linking to your categories.",
     icon: "🗂️",
+    group: "Products",
     defaults: {
       heading: "Shop By Category",
       subheading: "Find your next favourite by the kind of piece you love.",
@@ -205,6 +238,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Promotional banner",
     description: "Wide banner for an offer or a message.",
     icon: "✨",
+    group: "Banners",
     defaults: {
       heading: "Your Everyday Style, Elevated.",
       body: "Handpicked pieces that work as easily with kurtas as they do with denim.",
@@ -235,6 +269,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Image + text",
     description: "One image next to a paragraph — good for your story.",
     icon: "📝",
+    group: "Content",
     defaults: {
       heading: "Made for the little details",
       body: "Every Hairtie piece is picked by hand, checked one by one, and chosen because it makes an ordinary morning feel a bit more considered.",
@@ -265,6 +300,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Shop the look",
     description: "Lifestyle photos with the products in them.",
     icon: "👜",
+    group: "Products",
     defaults: {
       heading: "Shop The Look",
       subheading: "Styled by us, worn your way.",
@@ -277,6 +313,8 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Why us / benefits",
     description: "Three or four short reasons to buy from you.",
     icon: "💗",
+    group: "Trust & social",
+    blocksKey: "items",
     defaults: {
       heading: "Why Hairtie?",
       subheading: "",
@@ -294,6 +332,8 @@ export const SECTION_REGISTRY: SectionDef[] = [
         label: "Benefits",
         type: "repeater",
         itemLabel: "Benefit",
+        itemIcon: "💗",
+        titleKey: "title",
         max: 4,
         fields: [
           { key: "title", label: "Title", type: "text" },
@@ -307,6 +347,8 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Instagram grid",
     description: "Your Instagram photos with a follow link.",
     icon: "📸",
+    group: "Media",
+    blocksKey: "items",
     defaults: {
       heading: "Follow the Style",
       handle: "@iamhairtie",
@@ -331,6 +373,8 @@ export const SECTION_REGISTRY: SectionDef[] = [
         label: "Photos",
         type: "repeater",
         itemLabel: "Photo",
+        itemIcon: "📸",
+        titleKey: "imageUrl",
         max: 12,
         fields: [
           { key: "imageUrl", label: "Photo", type: "image" },
@@ -344,6 +388,8 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Customer reviews",
     description: "What your customers say.",
     icon: "⭐",
+    group: "Trust & social",
+    blocksKey: "items",
     defaults: {
       heading: "Loved by our customers",
       subheading: "",
@@ -360,6 +406,8 @@ export const SECTION_REGISTRY: SectionDef[] = [
         label: "Reviews",
         type: "repeater",
         itemLabel: "Review",
+        itemIcon: "⭐",
+        titleKey: "name",
         max: 9,
         fields: [
           { key: "name", label: "Customer name", type: "text" },
@@ -375,6 +423,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Store location",
     description: "Your shop address, hours and directions.",
     icon: "📍",
+    group: "Utility",
     defaults: {
       heading: "Prefer to shop in person?",
       body: "Come try things on, feel the fabric and let us help you pick.",
@@ -393,6 +442,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "WhatsApp help",
     description: "A friendly nudge to chat with you on WhatsApp.",
     icon: "💬",
+    group: "Utility",
     defaults: {
       heading: "Need Help Choosing?",
       body: "Tell us what you're looking for and we'll send you options.",
@@ -411,6 +461,8 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "FAQ",
     description: "Questions and answers that open and close.",
     icon: "❓",
+    group: "Content",
+    blocksKey: "items",
     defaults: {
       heading: "Frequently asked questions",
       subheading: "",
@@ -426,6 +478,8 @@ export const SECTION_REGISTRY: SectionDef[] = [
         label: "Questions",
         type: "repeater",
         itemLabel: "Question",
+        itemIcon: "❓",
+        titleKey: "question",
         max: 20,
         fields: [
           { key: "question", label: "Question", type: "text" },
@@ -439,6 +493,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Newsletter signup",
     description: "Collect email addresses for future offers.",
     icon: "✉️",
+    group: "Utility",
     defaults: {
       heading: "Something beautiful, now and then",
       body: "New arrivals and small offers. No spam, we promise.",
@@ -455,6 +510,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Video",
     description: "A YouTube or hosted video.",
     icon: "🎬",
+    group: "Media",
     defaults: {
       heading: "",
       videoUrl: "",
@@ -471,6 +527,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Text block",
     description: "A heading and some words.",
     icon: "🔤",
+    group: "Content",
     defaults: {
       heading: "Little details. Big style.",
       body: "Hairtie began with a simple idea: the small things you wear every day should feel special too.",
@@ -505,6 +562,7 @@ export const SECTION_REGISTRY: SectionDef[] = [
     label: "Single image",
     description: "One image, optionally clickable.",
     icon: "🏞️",
+    group: "Media",
     defaults: { imageUrl: "", alt: "", href: "", width: "wide", radius: true },
     fields: [
       { key: "imageUrl", label: "Image", type: "image" },
@@ -524,14 +582,201 @@ export const SECTION_REGISTRY: SectionDef[] = [
     ],
   },
   {
+    type: "columns",
+    label: "Feature columns",
+    description: "Two to four cards with an image, a title and a link.",
+    icon: "🧱",
+    group: "Content",
+    blocksKey: "items",
+    defaults: {
+      heading: "Three ways to wear it",
+      subheading: "",
+      columns: "3",
+      align: "left",
+      items: [
+        {
+          imageUrl: "/images/lifestyle/lifestyle-1.webp",
+          title: "For the everyday",
+          body: "Claw clips and scrunchies that hold all day without pulling.",
+          linkLabel: "Shop hair",
+          linkHref: "/shop",
+        },
+        {
+          imageUrl: "/images/lifestyle/lifestyle-2.webp",
+          title: "For the weekend",
+          body: "Totes and slings roomy enough for a full day out.",
+          linkLabel: "Shop bags",
+          linkHref: "/shop",
+        },
+        {
+          imageUrl: "/images/lifestyle/lifestyle-3.webp",
+          title: "For gifting",
+          body: "Little sets that look far more expensive than they are.",
+          linkLabel: "Shop gifts",
+          linkHref: "/shop",
+        },
+      ],
+    },
+    fields: [
+      ...headingFields,
+      {
+        key: "columns",
+        label: "Columns per row (desktop)",
+        type: "select",
+        options: [
+          { value: "2", label: "2" },
+          { value: "3", label: "3" },
+          { value: "4", label: "4" },
+        ],
+      },
+      {
+        key: "align",
+        label: "Text alignment",
+        type: "select",
+        options: [
+          { value: "left", label: "Left" },
+          { value: "center", label: "Centre" },
+        ],
+      },
+      {
+        key: "items",
+        label: "Columns",
+        type: "repeater",
+        itemLabel: "Column",
+        itemIcon: "🧱",
+        titleKey: "title",
+        max: 8,
+        fields: [
+          { key: "imageUrl", label: "Image", type: "image" },
+          { key: "title", label: "Title", type: "text" },
+          { key: "body", label: "Text", type: "textarea" },
+          { key: "linkLabel", label: "Link text", type: "text" },
+          { key: "linkHref", label: "Link goes to", type: "link" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "gallery",
+    label: "Image gallery",
+    description: "A grid of photos, each one optionally clickable.",
+    icon: "🖼",
+    group: "Media",
+    blocksKey: "items",
+    defaults: {
+      heading: "From the studio",
+      subheading: "",
+      columns: "4",
+      gap: "normal",
+      shape: "square",
+      items: [
+        { imageUrl: "/images/lifestyle/lifestyle-1.webp", caption: "Everyday edit", href: "/shop" },
+        { imageUrl: "/images/lifestyle/lifestyle-2.webp", caption: "Weekend bags", href: "/shop" },
+        { imageUrl: "/images/lifestyle/lifestyle-3.webp", caption: "Gift sets", href: "/shop" },
+        { imageUrl: "/images/banners/promo-wide.webp", caption: "New season", href: "/shop" },
+      ],
+    },
+    fields: [
+      ...headingFields,
+      {
+        key: "columns",
+        label: "Photos per row (desktop)",
+        type: "select",
+        options: [
+          { value: "2", label: "2" },
+          { value: "3", label: "3" },
+          { value: "4", label: "4" },
+          { value: "5", label: "5" },
+        ],
+      },
+      {
+        key: "shape",
+        label: "Photo shape",
+        type: "select",
+        options: [
+          { value: "square", label: "Square" },
+          { value: "portrait", label: "Portrait" },
+          { value: "landscape", label: "Landscape" },
+        ],
+      },
+      {
+        key: "gap",
+        label: "Spacing",
+        type: "select",
+        options: [
+          { value: "tight", label: "Tight" },
+          { value: "normal", label: "Normal" },
+          { value: "roomy", label: "Roomy" },
+        ],
+      },
+      {
+        key: "items",
+        label: "Photos",
+        type: "repeater",
+        itemLabel: "Photo",
+        itemIcon: "🖼",
+        titleKey: "caption",
+        max: 20,
+        fields: [
+          { key: "imageUrl", label: "Photo", type: "image" },
+          { key: "caption", label: "Caption", type: "text" },
+          { key: "href", label: "Links to", type: "link" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "announcement",
+    label: "Announcement strip",
+    description: "A slim coloured bar for offers, delivery news or notices.",
+    icon: "📣",
+    group: "Banners",
+    blocksKey: "items",
+    defaults: {
+      background: "#f3e3e0",
+      textColor: "#2f2925",
+      items: [
+        { text: "Free delivery on orders over ₹999", href: "/shipping-returns" },
+        { text: "New arrivals every Friday", href: "/shop?sort=newest" },
+        { text: "Visit our store in Nagpur", href: "/store" },
+      ],
+    },
+    fields: [
+      { key: "background", label: "Strip colour", type: "color" },
+      { key: "textColor", label: "Text colour", type: "color" },
+      {
+        key: "items",
+        label: "Messages",
+        type: "repeater",
+        itemLabel: "Message",
+        itemIcon: "📣",
+        titleKey: "text",
+        max: 6,
+        fields: [
+          { key: "text", label: "Message", type: "text" },
+          { key: "href", label: "Links to (optional)", type: "link" },
+        ],
+      },
+    ],
+  },
+  {
     type: "spacer",
     label: "Spacer",
     description: "Empty breathing room between sections.",
     icon: "↕️",
+    group: "Utility",
     defaults: { height: 48 },
     fields: [{ key: "height", label: "Height in pixels", type: "number", min: 8, max: 240 }],
   },
 ];
+
+/** One section as the visual editor holds it in memory. */
+export type EditorSection = {
+  id: string;
+  type: string;
+  isHidden: boolean;
+  settings: Record<string, unknown>;
+};
 
 export const SECTION_MAP = new Map(SECTION_REGISTRY.map((s) => [s.type, s]));
 
@@ -548,4 +793,53 @@ export function withDefaults(type: string, settings: unknown): Record<string, un
   const def = SECTION_MAP.get(type);
   if (!def) return (settings as Record<string, unknown>) ?? {};
   return { ...def.defaults, ...((settings as Record<string, unknown>) ?? {}) };
+}
+
+/** The repeater field a section exposes as draggable blocks, if it has one. */
+export function getBlocksField(type: string) {
+  const def = SECTION_MAP.get(type);
+  if (!def?.blocksKey) return null;
+  const field = def.fields.find(
+    (entry) => entry.key === def.blocksKey && entry.type === "repeater",
+  );
+  return (field as Extract<FieldDef, { type: "repeater" }> | undefined) ?? null;
+}
+
+/** Reads a section's blocks out of its settings. */
+export function readBlocks(type: string, settings: unknown): Record<string, unknown>[] {
+  const field = getBlocksField(type);
+  if (!field) return [];
+  const value = (settings as Record<string, unknown> | null)?.[field.key];
+  return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
+}
+
+/** A blank block, so "Add block" starts from empty fields rather than undefined. */
+export function blankBlock(field: Extract<FieldDef, { type: "repeater" }>) {
+  const entry: Record<string, unknown> = {};
+  for (const sub of field.fields) entry[sub.key] = sub.type === "number" ? 0 : "";
+  return entry;
+}
+
+/** The name shown against a block in the editor tree. */
+export function blockTitle(
+  field: Extract<FieldDef, { type: "repeater" }>,
+  item: Record<string, unknown>,
+  index: number,
+) {
+  const keys = [field.titleKey, "title", "question", "name", "heading", "text", "caption"];
+  for (const key of keys) {
+    if (!key) continue;
+    const value = item[key];
+    if (typeof value === "string" && value.trim()) {
+      // Image paths make poor labels — fall back to the numbered item name.
+      if (/^(https?:|\/)/.test(value) && /\.(webp|png|jpe?g|gif|avif)$/i.test(value)) continue;
+      return value.length > 44 ? `${value.slice(0, 44)}…` : value;
+    }
+  }
+  return `${field.itemLabel} ${index + 1}`;
+}
+
+/** Blocks the admin has hidden are kept in the draft but never rendered. */
+export function isBlockHidden(item: Record<string, unknown>) {
+  return item._hidden === true;
 }

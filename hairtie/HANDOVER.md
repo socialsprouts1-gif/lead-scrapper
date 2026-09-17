@@ -31,7 +31,7 @@ The menu on the left is grouped by how often you'll use it.
 
 | | |
 | --- | --- |
-| **Website Editor** | Change the banners, headings and sections on your pages. |
+| **Website Editor** | Change the banners, headings, sections and blocks on your pages. |
 | **Appearance** | Colours, fonts, button shapes, page width. |
 | **Media** | All your photos in one place. Upload once, use anywhere. |
 
@@ -123,8 +123,28 @@ On the left you can also:
 - **👁 Hide** a section without deleting it (useful for a seasonal banner).
 - **Copy** a section to duplicate it.
 - **🗑 Delete** a section.
-- **Add a section** to put something new on the page — there are eighteen kinds,
-  from hero banners and product rows to FAQs and WhatsApp buttons.
+- **Add a section** to put something new on the page — there are twenty-one
+  kinds, from hero banners and product rows to FAQs and WhatsApp buttons.
+- **Hover between two sections** and a small **+** appears — that adds the new
+  section exactly there instead of at the bottom.
+- **Undo** and **Redo** (the ↺ ↻ arrows, or ⌘Z / ⌘⇧Z) take back anything,
+  including a section you deleted by mistake.
+- Switch the preview between **desktop, tablet and phone**, or open the
+  **full-width** view to see the page without the panels.
+
+### Items inside a section ("blocks")
+Some sections are made of smaller repeating pieces — each FAQ question, each
+review, each Instagram photo, each gallery image, each column.
+
+Click the small **▸ arrow** next to such a section and those pieces appear
+indented underneath it. From there you can:
+
+- **Drag** one into a different order.
+- **Click** one to edit just that piece.
+- **👁 Hide** one for now — its words and picture are kept, it simply stops
+  showing on the site.
+- **Copy** or **🗑 Delete** one.
+- **+ Add** another at the end.
 
 ### Product rows
 A product row doesn't need you to pick products one by one. Choose *Which
@@ -220,7 +240,7 @@ store details, WhatsApp number, colours and fonts, and basic SEO.
 - Moving to a proper database, if the shop grows past a few thousand products or
   several people need to edit it at the same time.
 - Loyalty points, gift cards, subscriptions, multi-language, multi-currency.
-- New kinds of page sections beyond the eighteen that ship with the site.
+- New kinds of page sections beyond the twenty-one that ship with the site.
 
 ### Third-party costs — paid to them, not to your developer
 

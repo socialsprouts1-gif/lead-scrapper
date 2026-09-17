@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { allCategories } from "@/lib/catalog";
+import { getSectionDef } from "@/lib/sections";
 import { getDraftPage } from "@/lib/pages";
 import { getSiteSettings, getTheme, themeToCssVars } from "@/lib/settings";
 import { getWishlistIds } from "@/lib/wishlist";
@@ -22,6 +23,9 @@ export default async function PreviewPage(props: PageProps<"/preview/[slug]">) {
   const search = await props.searchParams;
   const selected = typeof search.selected === "string" ? search.selected : null;
   const themeDraft = search.theme === "draft";
+  // The click-to-select bridge blocks link navigation, so it only runs when the
+  // editor asks for it — "Full preview" opens the same page as a browsable one.
+  const editing = search.edit !== "0";
 
   const draft = getDraftPage(slug);
   const settings = getSiteSettings();
@@ -62,6 +66,7 @@ export default async function PreviewPage(props: PageProps<"/preview/[slug]">) {
               <div
                 key={section.id}
                 data-section-id={section.id}
+                data-section-label={getSectionDef(section.type)?.label ?? section.type}
                 data-selected={section.id === selected ? "true" : undefined}
                 style={{
                   position: "relative",
@@ -96,7 +101,7 @@ export default async function PreviewPage(props: PageProps<"/preview/[slug]">) {
         </main>
         <Footer settings={settings} />
       </ToastProvider>
-      <PreviewBridge />
+      {editing && <PreviewBridge />}
     </div>
   );
 }

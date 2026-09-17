@@ -8,6 +8,7 @@ built for a non-technical owner to run without a developer.
 sign-in, no configuration.
 
 ```bash
+git clone https://github.com/socialsprouts1-gif/hairtie.git
 cd hairtie
 npm install
 npm run dev          # http://localhost:3000
@@ -87,10 +88,28 @@ Customers are derived from order history rather than stored as accounts — one 
 per email address, with everything that person has bought.
 
 ### Visual website editor
-Click any section — in the list or straight on the live preview — to edit it. Drag
-to reorder, duplicate, hide or delete. Edits save as you type into a **draft**; the
-public site only changes when you press **Publish**, and **Discard** restores the
-last published version. Eighteen section types ship with it.
+A theme-editor-style builder: a section tree on the left, the section's settings
+beside it, and the real page on the right.
+
+- **Click to edit** — pick a section in the tree or click it straight on the
+  preview. The preview highlights whatever the pointer is over, in both
+  directions.
+- **Drag and drop at two levels** — sections reorder within the page, and a
+  section's *blocks* (a FAQ question, a review, an Instagram photo, a gallery
+  image, a column) reorder inside their section. A block never escapes its
+  section, and the canvas pulls back while you drag so you can see where things
+  will land.
+- **Blocks are first-class** — each one can be added, duplicated, hidden or
+  deleted from the tree, and hiding one keeps its content in the draft.
+- **Add anywhere** — the "+" between two rows inserts a section at that exact
+  spot; the picker is searchable and grouped.
+- **Undo / redo** — ⌘Z and ⌘⇧Z, up to 60 steps, covering edits, reorders and
+  deletions alike.
+- **Desktop / tablet / mobile** previews, plus a full-width mode.
+
+Edits save as you type into a **draft**; the public site only changes when you
+press **Publish**, and **Discard** restores the last published version. Twenty-one
+section types ship with it.
 
 ### Payments
 Cash on Delivery works out of the box. Razorpay (UPI, cards, net banking, wallets)
@@ -123,7 +142,6 @@ None are required. Each one only switches on an extra feature — see
 ## Project layout
 
 ```
-hairtie/
 ├── scripts/generate-placeholders.mjs   # regenerates the demo imagery
 ├── public/images/                      # demo photos (replace with real ones)
 └── src/
@@ -147,7 +165,8 @@ hairtie/
 
 | To change | Edit |
 | --- | --- |
-| A new page-builder block | `src/lib/sections.ts` + a component in `src/components/sections/SectionRenderer.tsx` |
+| A new page-builder section | `src/lib/sections.ts` + a component in `src/components/sections/SectionRenderer.tsx` |
+| Draggable blocks inside a section | give that section a `blocksKey` pointing at a `repeater` field in `src/lib/sections.ts` |
 | Product fields | `src/lib/types.ts`, then `src/components/admin/ProductForm.tsx` |
 | Shipping or tax logic | `src/lib/cart.ts` |
 | Order rules | `src/lib/orders.ts` |
