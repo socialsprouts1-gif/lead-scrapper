@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/** Reads the cookie to bounce an already-signed-in admin straight through. */
+export const dynamic = "force-dynamic";
+
 export default async function AdminLoginPage() {
   // Nothing to sign in to when no password is set, or when you already have.
   if (!adminPasswordRequired() || (await isAdminSignedIn())) redirect("/admin");

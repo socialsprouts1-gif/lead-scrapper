@@ -14,6 +14,16 @@ export const metadata: Metadata = {
 };
 
 /**
+ * Every admin screen reads the live shop, so none of them may be prerendered.
+ * Without this Next.js bakes several of them at build time and a serverless
+ * host then serves that frozen copy: the dashboard shows the numbers the build
+ * machine saw, Payments reports whatever was connected then, and the
+ * "nothing is being saved" warning — computed on a build machine that *does*
+ * have a writable disk — could never appear on the host that needs it.
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * Everything under /admin sits inside this layout, and the sign-in page
  * deliberately does not — otherwise the redirect below would bounce off itself.
  */
