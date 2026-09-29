@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { adminPasswordRequired, isAdminSignedIn } from "@/lib/admin-auth";
 import { isPersistent } from "@/lib/store";
 import { getSiteSettings } from "@/lib/settings";
 import { allOrders } from "@/lib/orders";
@@ -11,7 +13,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AdminLayout({ children }: LayoutProps<"/admin">) {
+/**
+ * Everything under /admin sits inside this layout, and the sign-in page
+ * deliberately does not — otherwise the redirect below would bounce off itself.
+ */
+export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
+  if (!(await isAdminSignedIn())) redirect("/admin/login");
+
   const settings = getSiteSettings();
 
   const pendingOrders = allOrders().filter((order) =>
@@ -26,6 +34,7 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
           pendingOrders={pendingOrders}
           pendingReviews={pendingReviewCount()}
           temporaryStorage={!isPersistent()}
+          canSignOut={adminPasswordRequired()}
         />
         <main className="min-w-0 flex-1 pb-16">{children}</main>
       </ToastProvider>

@@ -1,5 +1,7 @@
 "use server";
 
+import { denyUnlessAdmin } from "@/lib/admin-auth";
+
 import { revalidatePath } from "next/cache";
 import { discardTheme, saveSiteSettings, saveTheme } from "@/lib/settings";
 import type { SiteSettings } from "@/lib/site-settings";
@@ -7,6 +9,9 @@ import type { ThemeSettings } from "@/lib/theme";
 import type { AdminResult } from "@/app/actions/admin/products";
 
 export async function updateSiteSettings(patch: Partial<SiteSettings>): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   saveSiteSettings(patch);
   revalidatePath("/", "layout");
   return { ok: true, message: "Saved. Your shop has been updated." };
@@ -16,6 +21,9 @@ export async function updateTheme(
   patch: Partial<ThemeSettings>,
   mode: "draft" | "publish",
 ): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   saveTheme(patch, mode);
   if (mode === "publish") revalidatePath("/", "layout");
   return {
@@ -25,6 +33,9 @@ export async function updateTheme(
 }
 
 export async function discardThemeDraft(): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   discardTheme();
   return { ok: true, message: "Unpublished changes discarded." };
 }

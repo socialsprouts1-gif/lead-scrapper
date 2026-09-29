@@ -58,13 +58,16 @@ There is no login anywhere, for customers or for the admin.
 - Customers check out as guests. Their order number and phone are what they use
   to track an order.
 - The wishlist is kept in a cookie in the visitor's own browser.
-- `/admin` is open to anyone who can reach it.
+- `/admin` is open until you set `ADMIN_PASSWORD`.
 
-> **Before you put this on a public URL:** anyone who finds `/admin` can change
-> your products and read your orders. On your own computer that is fine. On the
-> public internet, put it behind your host's password protection (Vercel's
-> Deployment Protection, Netlify's site password, or HTTP basic auth in nginx),
-> or ask a developer to switch the sign-in back on.
+> **Before you put this on a public URL**, set two environment variables:
+>
+> | | |
+> | --- | --- |
+> | `ADMIN_PASSWORD` | Otherwise anyone who finds `/admin` can read your customers' addresses and change your shop. Set it and `/admin` asks for it once per device. The pages, the API routes and every admin action all check it. |
+> | `BLOB_READ_WRITE_TOKEN` | On Vercel and other serverless hosts the filesystem is read-only, so without a store **nothing is saved — customer orders included**. Connect a Vercel Blob store and this is set for you. |
+>
+> The admin says so plainly when either is missing.
 
 ---
 
@@ -153,9 +156,11 @@ None are required. Each one only switches on an extra feature — see
 | Variable | What it does |
 | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | Public address, for canonical URLs and the sitemap. Also settable in Admin → Store Settings. |
+| `ADMIN_PASSWORD` | Puts a password on `/admin`. Unset, the admin is open — fine locally, not on a public URL. |
+| `BLOB_READ_WRITE_TOKEN` | Saves the shop to Vercel Blob (privately). Vercel sets this when you connect a Blob store. Without it, a serverless host keeps nothing. |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Fallback for online payment when the fields in Admin → Payments are blank. Without either, checkout is Cash on Delivery only. |
 | `RAZORPAY_WEBHOOK_SECRET` | Fallback webhook secret for `/api/payments/razorpay/webhook`. |
-| `MEDIA_DRIVER` | `local` (default) or `supabase`. |
+| `MEDIA_DRIVER` | `blob`, `local` or `supabase`. Left unset, it picks Blob when one is connected and the local disk otherwise. |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_STORAGE_BUCKET` | Where uploaded images go when `MEDIA_DRIVER=supabase`. |
 
 ---
@@ -176,7 +181,8 @@ None are required. Each one only switches on an extra feature — see
     │   └── sitemap.ts · robots.ts
     ├── components/         # storefront/ · sections/ · admin/ · ui/
     └── lib/
-        ├── store.ts        # the JSON document: load, save, mutate
+        ├── store.ts        # the JSON document: Vercel Blob / disk / memory
+        ├── admin-auth.ts   # the shared admin password and its cookie
         ├── types.ts        # the data model
         ├── sections.ts     # the block registry both the editor and site read
         ├── payments.ts     # gateway keys — server-only, never serialised out

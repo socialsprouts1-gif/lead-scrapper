@@ -1,8 +1,13 @@
+import { isAdminSignedIn } from "@/lib/admin-auth";
 import { NextResponse } from "next/server";
 import { addMedia, listMedia, mediaFolders, removeMedia, updateMedia } from "@/lib/media";
 import { storeUpload } from "@/lib/storage";
 
 export async function GET(request: Request) {
+  if (!(await isAdminSignedIn())) {
+    return new Response("Not signed in.", { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const take = Math.min(Number(searchParams.get("take") ?? 60), 200);
   const skip = Math.max(Number(searchParams.get("skip") ?? 0), 0);
@@ -20,6 +25,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!(await isAdminSignedIn())) {
+    return new Response("Not signed in.", { status: 401 });
+  }
+
   const form = await request.formData();
   const files = form.getAll("files").filter((entry): entry is File => entry instanceof File);
   const folder = String(form.get("folder") ?? "Uploads") || "Uploads";
@@ -66,6 +75,10 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!(await isAdminSignedIn())) {
+    return new Response("Not signed in.", { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ message: "Missing id." }, { status: 400 });
@@ -77,6 +90,10 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (!(await isAdminSignedIn())) {
+    return new Response("Not signed in.", { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   if (!body?.id) return NextResponse.json({ message: "Missing id." }, { status: 400 });
 

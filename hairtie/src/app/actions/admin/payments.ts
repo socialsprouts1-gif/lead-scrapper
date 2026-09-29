@@ -1,5 +1,7 @@
 "use server";
 
+import { denyUnlessAdmin } from "@/lib/admin-auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { savePaymentSettings, type PaymentPatch } from "@/lib/payments";
@@ -32,6 +34,9 @@ const schema = z.object({
 });
 
 export async function updatePaymentSettings(input: unknown): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: "Please check the payment settings and try again." };
@@ -67,6 +72,9 @@ export async function updatePaymentSettings(input: unknown): Promise<AdminResult
 
 /** Asks Razorpay whether the stored keys work. Nothing is charged. */
 export async function testPaymentConnection(): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const { keyId, keySecret } = razorpayCredentials();
   const result = await testRazorpayKeys(keyId, keySecret);
   return { ok: result.ok, message: result.message };
@@ -74,6 +82,9 @@ export async function testPaymentConnection(): Promise<AdminResult> {
 
 /** Clears the stored gateway keys, falling back to environment variables. */
 export async function clearGatewayKeys(): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   savePaymentSettings({ razorpay: { keyId: "", keySecret: "", webhookSecret: "" } });
   revalidatePath("/", "layout");
   return {

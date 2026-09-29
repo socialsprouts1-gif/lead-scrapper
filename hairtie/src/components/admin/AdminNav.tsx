@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "@/app/actions/admin/auth";
 import { useState } from "react";
 import {
   LayoutDashboard, Package, FolderTree, ReceiptText, Users, Paintbrush,
   Images, TicketPercent, MessageSquareText, ChartNoAxesColumn, Settings,
-  Menu, X, ExternalLink, Palette, CreditCard,
+  Menu, X, ExternalLink, Palette, CreditCard, LogOut,
 } from "lucide-react";
 
 const GROUPS: { title: string; items: { href: string; label: string; icon: React.ElementType }[] }[] = [
@@ -45,11 +46,13 @@ export function AdminNav({
   pendingOrders,
   pendingReviews,
   temporaryStorage,
+  canSignOut,
 }: {
   storeName: string;
   pendingOrders: number;
   pendingReviews: number;
   temporaryStorage: boolean;
+  canSignOut: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -120,13 +123,23 @@ export function AdminNav({
             className="mb-3 rounded-lg px-2.5 py-2 text-[0.7rem] leading-snug"
             style={{ background: "#f7efe2", color: "#8a6b3c" }}
           >
-            This host can&apos;t save to disk, so changes you make here last only until the server
-            restarts.
+            <strong>Nothing here is being saved.</strong> This host has no storage, so products,
+            page edits and even customer orders are lost when the server restarts. Connect a
+            Vercel Blob store, or run the shop somewhere with a disk.
           </p>
         )}
-        <Link href="/" target="_blank" className="flex items-center gap-1 text-xs" style={{ color: "var(--adm-muted)" }}>
-          View shop <ExternalLink size={12} strokeWidth={1.7} />
-        </Link>
+        <div className="flex items-center justify-between gap-3">
+          <Link href="/" target="_blank" className="flex items-center gap-1 text-xs" style={{ color: "var(--adm-muted)" }}>
+            View shop <ExternalLink size={12} strokeWidth={1.7} />
+          </Link>
+          {canSignOut && (
+            <form action={signOut}>
+              <button type="submit" className="flex items-center gap-1 text-xs" style={{ color: "var(--adm-muted)" }}>
+                Sign out <LogOut size={12} strokeWidth={1.7} />
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

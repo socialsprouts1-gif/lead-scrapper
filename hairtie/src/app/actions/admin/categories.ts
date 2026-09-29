@@ -1,5 +1,7 @@
 "use server";
 
+import { denyUnlessAdmin } from "@/lib/admin-auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createId, mutate, store } from "@/lib/store";
@@ -31,6 +33,9 @@ function uniqueSlug(base: string, excludeId?: string) {
 }
 
 export async function saveCategory(input: unknown, categoryId?: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const parsed = categorySchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Please check the details." };
@@ -83,6 +88,9 @@ export async function saveCategory(input: unknown, categoryId?: string): Promise
 }
 
 export async function deleteCategory(categoryId: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const hasChildren = store().categories.some((entry) => entry.parentId === categoryId);
   if (hasChildren) {
     return { ok: false, message: "Move or delete the subcategories inside this one first." };
@@ -109,6 +117,9 @@ export async function deleteCategory(categoryId: string): Promise<AdminResult> {
 }
 
 export async function reorderCategories(orderedIds: string[]): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   mutate((db) => {
     orderedIds.forEach((id, index) => {
       const category = db.categories.find((entry) => entry.id === id);
@@ -120,6 +131,9 @@ export async function reorderCategories(orderedIds: string[]): Promise<AdminResu
 }
 
 export async function toggleCategoryFeatured(categoryId: string, featured: boolean): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   mutate((db) => {
     const category = db.categories.find((entry) => entry.id === categoryId);
     if (category) category.isFeatured = featured;

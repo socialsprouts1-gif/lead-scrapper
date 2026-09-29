@@ -1,3 +1,4 @@
+import { isAdminSignedIn } from "@/lib/admin-auth";
 import { toCsv, csvResponse } from "@/lib/csv";
 import { allOrders, customerSummaries } from "@/lib/orders";
 import { allProducts, categoryById } from "@/lib/catalog";
@@ -11,6 +12,10 @@ import { ORDER_STATUS_LABELS } from "@/lib/order-status";
 const rupees = (paise: number) => (paise / 100).toFixed(2);
 
 export async function GET(_request: Request, context: RouteContext<"/api/admin/export/[kind]">) {
+  if (!(await isAdminSignedIn())) {
+    return new Response("Not signed in.", { status: 401 });
+  }
+
   const { kind } = await context.params;
   const stamp = new Date().toISOString().slice(0, 10);
 

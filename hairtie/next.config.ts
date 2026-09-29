@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     // Remote hosts that may serve product images. Add your storage host here
     // (for example a Supabase project) when you switch MEDIA_DRIVER.
     remotePatterns: [
+      { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
       { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" },
       { protocol: "https", hostname: "*.amazonaws.com" },
       { protocol: "https", hostname: "res.cloudinary.com" },

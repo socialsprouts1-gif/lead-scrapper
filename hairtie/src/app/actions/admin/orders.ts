@@ -1,5 +1,7 @@
 "use server";
 
+import { denyUnlessAdmin } from "@/lib/admin-auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { mutate } from "@/lib/store";
@@ -16,6 +18,9 @@ const STATUSES: OrderStatus[] = [
 const ACTOR = "Shop manager";
 
 export async function setOrderStatus(orderId: string, status: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   if (!STATUSES.includes(status as OrderStatus)) return { ok: false, message: "Unknown status." };
   try {
     changeOrderStatus(orderId, status as OrderStatus, ACTOR);
@@ -27,6 +32,9 @@ export async function setOrderStatus(orderId: string, status: string): Promise<A
 }
 
 export async function setPaymentStatus(orderId: string, paymentStatus: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const valid: PaymentStatus[] = ["UNPAID", "PAID", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"];
   if (!valid.includes(paymentStatus as PaymentStatus)) {
     return { ok: false, message: "Unknown payment status." };
@@ -58,6 +66,9 @@ const shippingSchema = z.object({
 });
 
 export async function saveShipping(orderId: string, input: unknown): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const parsed = shippingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "Please check the tracking details." };
   const data = parsed.data;
@@ -86,6 +97,9 @@ export async function saveShipping(orderId: string, input: unknown): Promise<Adm
 }
 
 export async function saveOrderNote(orderId: string, note: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   mutate((db) => {
     const order = db.orders.find((entry) => entry.id === orderId);
     if (order) order.adminNote = note.slice(0, 2000) || null;
@@ -99,6 +113,9 @@ export async function recordRefund(
   amountRupees: number,
   reference: string,
 ): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const order = orderById(orderId);
   if (!order) return { ok: false, message: "Order not found." };
 
@@ -136,6 +153,9 @@ export async function recordRefund(
  * and the order's own history stay correct.
  */
 export async function bulkOrderAction(orderIds: string[], status: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   if (!Array.isArray(orderIds) || orderIds.length === 0) {
     return { ok: false, message: "Nothing was selected." };
   }

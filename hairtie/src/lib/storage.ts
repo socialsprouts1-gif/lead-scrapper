@@ -2,11 +2,14 @@ import "server-only";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { put as putBlob } from "@vercel/blob";
 
 /**
  * Media storage.
  *
- * Two drivers ship with the platform, chosen with MEDIA_DRIVER:
+ * Three drivers ship with the platform, chosen with MEDIA_DRIVER — or picked
+ * automatically when a Vercel Blob store is connected:
+ *   blob      — Vercel Blob. Public, because browsers have to fetch images.
  *   local     — writes into /public/uploads. Fine for a VPS or local use, but a
  *               serverless host (Vercel) has a read-only filesystem, so uploads
  *               will not persist there.
@@ -36,9 +39,19 @@ export const ALLOWED_UPLOAD_TYPES = [
   "image/gif",
 ];
 
-export function mediaDriver() {
-  const driver = process.env.MEDIA_DRIVER ?? "local";
-  return driver === "supabase" ? "supabase" : "local";
+export type MediaDriver = "blob" | "supabase" | "local";
+
+/**
+ * Where uploaded images go. Vercel Blob is picked up automatically when a Blob
+ * store is connected, because the local disk is read-only there; MEDIA_DRIVER
+ * overrides that if you would rather use something else.
+ */
+export function mediaDriver(): MediaDriver {
+  const configured = process.env.MEDIA_DRIVER;
+  if (configured === "supabase" || configured === "blob" || configured === "local") {
+    return configured;
+  }
+  return process.env.BLOB_READ_WRITE_TOKEN ? "blob" : "local";
 }
 
 function safeName(original: string) {
@@ -90,8 +103,24 @@ export async function storeUpload(file: File): Promise<StoredFile> {
 }
 
 async function put(filename: string, data: Buffer, contentType: string): Promise<string> {
-  if (mediaDriver() === "supabase") return putSupabase(filename, data, contentType);
+  const driver = mediaDriver();
+  if (driver === "blob") return putVercelBlob(filename, data, contentType);
+  if (driver === "supabase") return putSupabase(filename, data, contentType);
   return putLocal(filename, data);
+}
+
+/**
+ * Images are public by design — a browser has to fetch them — unlike the shop
+ * document, which is stored privately.
+ */
+async function putVercelBlob(filename: string, data: Buffer, contentType: string) {
+  const result = await putBlob(`hairtie/media/${filename}`, data, {
+    access: "public",
+    contentType,
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+  return result.url;
 }
 
 async function putLocal(filename: string, data: Buffer) {

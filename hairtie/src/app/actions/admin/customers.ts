@@ -1,5 +1,7 @@
 "use server";
 
+import { denyUnlessAdmin } from "@/lib/admin-auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { saveCustomerProfile } from "@/lib/customers";
@@ -14,6 +16,9 @@ const schema = z.object({
 
 /** Saves the shop owner's own notes about a customer. */
 export async function updateCustomerProfile(input: unknown): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "Please check those details." };
 

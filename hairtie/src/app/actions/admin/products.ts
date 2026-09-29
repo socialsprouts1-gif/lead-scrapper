@@ -1,5 +1,7 @@
 "use server";
 
+import { denyUnlessAdmin } from "@/lib/admin-auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createId, mutate, now, store } from "@/lib/store";
@@ -179,6 +181,9 @@ function applyCore(product: Product, data: ParsedProduct) {
 }
 
 export async function createProduct(input: unknown): Promise<AdminResult<{ id: string }>> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const parsed = productSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: validationMessage(parsed.error) };
   const data = parsed.data;
@@ -211,6 +216,9 @@ export async function createProduct(input: unknown): Promise<AdminResult<{ id: s
 }
 
 export async function updateProduct(productId: string, input: unknown): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const parsed = productSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: validationMessage(parsed.error) };
   const data = parsed.data;
@@ -237,6 +245,9 @@ export async function updateProduct(productId: string, input: unknown): Promise<
 }
 
 export async function deleteProduct(productId: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const ordered = store().orders.some((order) =>
     order.items.some((item) => item.productId === productId),
   );
@@ -273,6 +284,9 @@ export async function setProductStatus(
   productId: string,
   status: "DRAFT" | "ACTIVE" | "ARCHIVED",
 ): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   mutate((db) => {
     const product = db.products.find((entry) => entry.id === productId);
     if (product) {
@@ -286,6 +300,9 @@ export async function setProductStatus(
 }
 
 export async function duplicateProduct(productId: string): Promise<AdminResult<{ id: string }>> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const source = productById(productId);
   if (!source) return { ok: false, message: "That product no longer exists." };
 
@@ -325,6 +342,9 @@ export async function duplicateProduct(productId: string): Promise<AdminResult<{
 }
 
 export async function updateStock(productId: string, stock: number): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   if (!Number.isFinite(stock) || stock < 0) return { ok: false, message: "Enter a valid stock number." };
   mutate((db) => {
     const product = db.products.find((entry) => entry.id === productId);
@@ -341,6 +361,9 @@ export async function bulkProductAction(
   productIds: string[],
   action: "publish" | "draft" | "archive" | "delete",
 ): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   if (productIds.length === 0) return { ok: false, message: "Select at least one product." };
 
   if (action === "delete") {

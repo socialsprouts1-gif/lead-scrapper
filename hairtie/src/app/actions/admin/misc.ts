@@ -1,5 +1,7 @@
 "use server";
 
+import { denyUnlessAdmin } from "@/lib/admin-auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createId, mutate, now, store } from "@/lib/store";
@@ -30,6 +32,9 @@ export async function setReviewStatus(
   reviewId: string,
   status: "APPROVED" | "REJECTED" | "PENDING",
 ): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const productId = mutate((db) => {
     const review = db.reviews.find((entry) => entry.id === reviewId);
     if (!review) return null;
@@ -45,6 +50,9 @@ export async function setReviewStatus(
 }
 
 export async function deleteReview(reviewId: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const productId = mutate((db) => {
     const review = db.reviews.find((entry) => entry.id === reviewId);
     if (!review) return null;
@@ -80,6 +88,9 @@ const couponSchema = z.object({
 });
 
 export async function saveCoupon(input: unknown, couponId?: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const parsed = couponSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Please check the discount details." };
@@ -135,6 +146,9 @@ export async function saveCoupon(input: unknown, couponId?: string): Promise<Adm
 }
 
 export async function deleteCoupon(couponId: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   mutate((db) => {
     db.coupons = db.coupons.filter((coupon) => coupon.id !== couponId);
   });
@@ -143,6 +157,9 @@ export async function deleteCoupon(couponId: string): Promise<AdminResult> {
 }
 
 export async function toggleCoupon(couponId: string, isActive: boolean): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   mutate((db) => {
     const coupon = db.coupons.find((entry) => entry.id === couponId);
     if (coupon) coupon.isActive = isActive;

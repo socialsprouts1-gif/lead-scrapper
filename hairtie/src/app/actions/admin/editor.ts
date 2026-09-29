@@ -1,5 +1,7 @@
 "use server";
 
+import { denyUnlessAdmin } from "@/lib/admin-auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createId, mutate, now, store } from "@/lib/store";
@@ -37,6 +39,9 @@ export async function replacePageSections(
   pageId: string,
   sections: { id: string; type: string; isHidden: boolean; settings: Record<string, unknown> }[],
 ): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   if (!Array.isArray(sections)) return { ok: false, message: "Could not read that change." };
   if (sections.some((section) => !getSectionDef(section.type))) {
     return { ok: false, message: "That change refers to a section type that no longer exists." };
@@ -57,6 +62,9 @@ export async function replacePageSections(
 }
 
 export async function publishPageChanges(slug: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const page = publishPage(slug);
   if (!page) return { ok: false, message: "That page no longer exists." };
   revalidatePath("/", "layout");
@@ -64,6 +72,9 @@ export async function publishPageChanges(slug: string): Promise<AdminResult> {
 }
 
 export async function discardPageChanges(slug: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const result = discardPageDraft(slug);
   if (!result.ok) return { ok: false, message: result.reason };
   return { ok: true, message: "Unpublished changes discarded." };
@@ -78,6 +89,9 @@ const pageMetaSchema = z.object({
 });
 
 export async function updatePageMeta(pageId: string, input: unknown): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const parsed = pageMetaSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "Please check the page details." };
   const data = parsed.data;
@@ -98,6 +112,9 @@ export async function updatePageMeta(pageId: string, input: unknown): Promise<Ad
 }
 
 export async function createPage(title: string): Promise<AdminResult<{ slug: string }>> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const clean = title.trim();
   if (clean.length < 2) return { ok: false, message: "Please give the page a name." };
 
@@ -143,6 +160,9 @@ export async function createPage(title: string): Promise<AdminResult<{ slug: str
 }
 
 export async function deletePage(pageId: string): Promise<AdminResult> {
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+
   const page = findPage(pageId);
   if (!page) return { ok: false, message: "That page no longer exists." };
   if (page.isSystem) {
