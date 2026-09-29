@@ -8,3 +8,10 @@ Thumbs.db
 Procfile
 node_modules/
 **/node_modules/
+
+# Hairtie
+hairtie/.next/
+hairtie/node_modules/
+hairtie/src/generated/
+hairtie/public/uploads/
+hairtie/.env
