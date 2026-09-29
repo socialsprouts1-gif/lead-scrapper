@@ -1,5 +1,5 @@
 import { getSiteSettings } from "@/lib/settings";
-import { razorpayConfigured } from "@/lib/razorpay";
+import { paymentView } from "@/lib/payments";
 import { mediaDriver } from "@/lib/storage";
 import { AdminPage, PageHeader } from "@/components/admin/ui";
 import { SettingsForm } from "@/components/admin/SettingsForm";
@@ -7,12 +7,16 @@ import { SettingsForm } from "@/components/admin/SettingsForm";
 export default async function AdminSettingsPage() {
   const settings = await getSiteSettings();
 
+  const payments = paymentView();
+
   const integrations = [
     {
-      name: "Online payments (Razorpay)",
-      ready: razorpayConfigured(),
-      readyNote: "Connected. Customers can pay by UPI, card or net banking.",
-      todo: "Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to your hosting environment variables. Until then, checkout offers Cash on Delivery only.",
+      name: "Online payments",
+      ready: payments.onlineReady,
+      readyNote: payments.testMode
+        ? "Connected in test mode. Untick “test account” in Payments when you are ready for real orders."
+        : "Connected. Customers can pay by UPI, card or net banking.",
+      todo: "Add your gateway keys in Admin → Payments. Until then, checkout offers Cash on Delivery only.",
     },
     {
       name: "Image storage",

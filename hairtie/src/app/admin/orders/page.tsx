@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { Suspense } from "react";
-import { formatPaise } from "@/lib/money";
-import { formatDate } from "@/lib/utils";
-import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE, allOrders } from "@/lib/orders";
-import { AdminPage, EmptyState, PageHeader, Pagination, Pill } from "@/components/admin/ui";
+import { ORDER_STATUS_LABELS, allOrders } from "@/lib/orders";
+import { AdminPage, EmptyState, PageHeader, Pagination } from "@/components/admin/ui";
 import { FilterSelect, SearchInput } from "@/components/admin/Controls";
+import { OrdersTable } from "@/components/admin/OrdersTable";
 
 const PER_PAGE = 25;
 
@@ -52,7 +50,11 @@ export default async function AdminOrdersPage(props: PageProps<"/admin/orders">)
       <PageHeader
         title="Orders"
         description={`${countFor("PENDING")} new · ${countFor("PROCESSING")} being packed · ${countFor("SHIPPED")} on the way`}
-      />
+      >
+        <a href="/api/admin/export/orders" className="adm-btn adm-btn-ghost" download>
+          Export CSV
+        </a>
+      </PageHeader>
 
       <Suspense fallback={<div className="h-10" />}>
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -88,64 +90,21 @@ export default async function AdminOrdersPage(props: PageProps<"/admin/orders">)
         />
       ) : (
         <>
-          <div className="adm-card">
-            <div className="adm-scroll">
-              <table className="adm-table">
-                <thead>
-                  <tr>
-                    <th>Order</th>
-                    <th>Customer</th>
-                    <th>Items</th>
-                    <th>Total</th>
-                    <th>Payment</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((order) => (
-                    <tr key={order.id}>
-                      <td>
-                        <Link href={`/admin/orders/${order.id}`} className="font-medium underline underline-offset-2">
-                          {order.orderNumber}
-                        </Link>
-                        <div className="text-xs" style={{ color: "var(--adm-muted)" }}>
-                          {formatDate(order.placedAt, true)}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="max-w-[12rem] truncate">{order.customerName}</div>
-                        <div className="text-xs" style={{ color: "var(--adm-muted)" }}>
-                          {order.customerPhone} · {order.shippingCity}
-                        </div>
-                      </td>
-                      <td>{order.items.length}</td>
-                      <td>{formatPaise(order.total)}</td>
-                      <td>
-                        <div className="text-xs">{order.paymentMethod === "COD" ? "COD" : "Online"}</div>
-                        <div
-                          className="text-xs"
-                          style={{ color: order.paymentStatus === "PAID" ? "#356b40" : "var(--adm-muted)" }}
-                        >
-                          {order.paymentStatus === "PAID"
-                            ? "Paid"
-                            : order.paymentStatus === "UNPAID"
-                              ? "Not paid"
-                              : order.paymentStatus.toLowerCase().replace("_", " ")}
-                        </div>
-                      </td>
-                      <td>
-                        <Pill
-                          label={ORDER_STATUS_LABELS[order.status]}
-                          bg={ORDER_STATUS_TONE[order.status].bg}
-                          color={ORDER_STATUS_TONE[order.status].color}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <OrdersTable
+            orders={orders.map((order) => ({
+              id: order.id,
+              orderNumber: order.orderNumber,
+              placedAt: order.placedAt,
+              customerName: order.customerName,
+              customerPhone: order.customerPhone,
+              city: order.shippingCity,
+              itemCount: order.items.length,
+              total: order.total,
+              paymentMethod: order.paymentMethod,
+              paymentStatus: order.paymentStatus,
+              status: order.status,
+            }))}
+          />
           <Pagination page={page} pageCount={pageCount} hrefFor={hrefFor} />
         </>
       )}

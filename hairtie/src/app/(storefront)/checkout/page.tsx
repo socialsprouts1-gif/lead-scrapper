@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { computeTotals, getCart, linePrice } from "@/lib/cart";
 import { getSiteSettings } from "@/lib/settings";
-import { razorpayConfigured } from "@/lib/razorpay";
+import { codAvailableFor, paymentView } from "@/lib/payments";
 import { formatPaise } from "@/lib/money";
 import { CheckoutForm } from "@/components/storefront/CheckoutForm";
 import { OrderSummary } from "@/components/storefront/OrderSummary";
@@ -21,6 +21,7 @@ export default async function CheckoutPage() {
   if (lines.length === 0) redirect("/cart");
 
   const totals = computeTotals(resolved, settings);
+  const payments = paymentView();
 
   return (
     <div className="ht-container py-10 md:py-14">
@@ -31,9 +32,8 @@ export default async function CheckoutPage() {
 
       <div className="grid gap-12 lg:grid-cols-[1fr_22rem] lg:gap-16">
         <CheckoutForm
-          codEnabled={settings.shipping.codEnabled}
-          onlineEnabled={settings.shipping.onlinePaymentEnabled}
-          onlineConfigured={razorpayConfigured()}
+          payments={payments}
+          codAvailable={codAvailableFor(totals.total)}
           total={totals.total}
         />
 

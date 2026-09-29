@@ -8,6 +8,7 @@ import { placeOrder, type PlaceOrderResult } from "@/app/actions/checkout";
 import { useToast } from "@/components/ui/Toast";
 import { Spinner } from "@/components/ui/Spinner";
 import { formatPaise } from "@/lib/money";
+import type { PaymentView } from "@/lib/payment-settings";
 
 const INDIAN_STATES = [
   "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh",
@@ -26,19 +27,19 @@ declare global {
 }
 
 export function CheckoutForm({
-  codEnabled,
-  onlineEnabled,
-  onlineConfigured,
+  payments,
+  codAvailable,
   total,
 }: {
-  codEnabled: boolean;
-  onlineEnabled: boolean;
-  onlineConfigured: boolean;
+  payments: PaymentView;
+  /** COD can be switched on yet still not apply to this order's value. */
+  codAvailable: boolean;
   total: number;
 }) {
   const router = useRouter();
   const { show } = useToast();
-  const online = onlineEnabled && onlineConfigured;
+  const online = payments.onlineReady;
+  const codFee = codAvailable ? payments.codFeePaise : 0;
   const [method, setMethod] = useState<"COD" | "RAZORPAY">(online ? "RAZORPAY" : "COD");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -186,21 +187,45 @@ export function CheckoutForm({
                 description="UPI, cards, net banking and wallets — handled securely by Razorpay."
               />
             )}
-            {codEnabled && (
+            {codAvailable && (
               <PaymentOption
                 selected={method === "COD"}
                 onSelect={() => setMethod("COD")}
                 icon={<Banknote size={18} strokeWidth={1.5} />}
                 title="Cash on Delivery"
-                description="Pay the delivery partner when your parcel arrives."
+                description={
+                  codFee > 0
+                    ? `Pay the delivery partner when your parcel arrives. A ${formatPaise(codFee)} handling charge applies.`
+                    : "Pay the delivery partner when your parcel arrives."
+                }
               />
             )}
           </div>
 
-          {!online && onlineEnabled && !onlineConfigured && (
+          {method === "COD" && codFee > 0 && (
+            <p className="mt-3 flex items-center justify-between rounded-lg px-3 py-2 text-sm" style={{ background: "var(--ht-secondary)" }}>
+              <span>Cash on Delivery charge</span>
+              <span>+{formatPaise(codFee)}</span>
+            </p>
+          )}
+
+          {payments.checkoutNote && (
+            <p className="mt-3 text-xs" style={{ color: "var(--ht-muted)" }}>
+              {payments.checkoutNote}
+            </p>
+          )}
+
+          {!online && payments.onlineEnabled && (
             <p className="mt-3 rounded-lg px-3 py-2 text-xs" style={{ background: "var(--ht-secondary)" }}>
-              Online payment needs to be configured before it can be used. Add your Razorpay keys to the
-              environment variables to switch it on.
+              Online payment is switched on but not connected yet, so it is hidden here. Add the gateway
+              keys in Admin → Payments to start taking online payments.
+            </p>
+          )}
+
+          {!online && !codAvailable && (
+            <p className="mt-3 rounded-lg px-3 py-2 text-xs" style={{ background: "var(--ht-secondary)" }}>
+              No payment method is available for this order right now. Please contact us and we will help
+              you complete it.
             </p>
           )}
         </section>
@@ -213,7 +238,9 @@ export function CheckoutForm({
         <div>
           <button type="submit" className="ht-btn ht-btn-primary w-full" disabled={busy || (method === "RAZORPAY" && !scriptReady)}>
             {busy ? <Spinner size={15} /> : <Lock size={15} strokeWidth={1.7} />}
-            {method === "COD" ? `Place order · ${formatPaise(total)}` : `Pay ${formatPaise(total)}`}
+            {method === "COD"
+              ? `Place order · ${formatPaise(total + codFee)}`
+              : `Pay ${formatPaise(total)}`}
           </button>
           <p className="mt-3 text-center text-xs" style={{ color: "var(--ht-muted)" }}>
             By placing this order you agree to our Terms & Conditions and Privacy Policy.

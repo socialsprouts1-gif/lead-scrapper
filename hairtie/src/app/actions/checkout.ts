@@ -5,6 +5,8 @@ import { mutate } from "@/lib/store";
 import { getCart } from "@/lib/cart";
 import { createOrderFromCart, findStockProblems } from "@/lib/orders";
 import { createRazorpayOrder, razorpayConfigured, razorpayKeyId } from "@/lib/razorpay";
+import { getPaymentSettings } from "@/lib/payments";
+import { isCustomerBlocked } from "@/lib/customers";
 import { getSiteSettings } from "@/lib/settings";
 
 const checkoutSchema = z.object({
@@ -56,14 +58,24 @@ export async function placeOrder(input: unknown): Promise<PlaceOrderResult> {
     return { ok: false, message: "Your bag is empty." };
   }
 
-  if (details.paymentMethod === "RAZORPAY" && (!settings.shipping.onlinePaymentEnabled || !razorpayConfigured())) {
+  const payments = getPaymentSettings();
+
+  if (isCustomerBlocked(details.customerEmail)) {
+    return {
+      ok: false,
+      message:
+        "We cannot take an order from this email address. Please get in touch and we will help.",
+    };
+  }
+
+  if (details.paymentMethod === "RAZORPAY" && (!payments.onlineEnabled || !razorpayConfigured())) {
     return {
       ok: false,
       message:
         "Online payment is not available right now. Please choose Cash on Delivery, or contact us on WhatsApp.",
     };
   }
-  if (details.paymentMethod === "COD" && !settings.shipping.codEnabled) {
+  if (details.paymentMethod === "COD" && !payments.codEnabled) {
     return { ok: false, message: "Cash on Delivery is currently switched off." };
   }
 

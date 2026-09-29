@@ -157,6 +157,7 @@ export default async function OrderPage(props: PageProps<"/order/[orderNumber]">
               <Row label={`Discount${order.couponCode ? ` (${order.couponCode})` : ""}`} value={`− ${formatPaise(order.discountAmount)}`} />
             )}
             <Row label="Shipping" value={order.shippingFee === 0 ? "Free" : formatPaise(order.shippingFee)} />
+            {order.codFee > 0 && <Row label="Cash on Delivery charge" value={formatPaise(order.codFee)} />}
             <div className="flex justify-between border-t pt-3 text-base" style={{ borderColor: "var(--ht-border)" }}>
               <dt>Total</dt>
               <dd className="font-serif text-xl">{formatPaise(order.total)}</dd>

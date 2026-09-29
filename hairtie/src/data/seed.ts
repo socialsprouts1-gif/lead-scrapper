@@ -627,6 +627,7 @@ function section(type: string, overrides: Record<string, unknown> = {}) {
 
 const HOME_SECTIONS = [
   section("hero"),
+  section("trustBadges"),
   section("productGrid", {
     heading: "New Arrivals",
     subheading: "Just added — fresh pieces from this week's edit.",
@@ -635,22 +636,24 @@ const HOME_SECTIONS = [
     viewAllHref: "/shop?sort=newest",
   }),
   section("categoryGrid"),
-  section("productGrid", {
-    heading: "Best Sellers",
-    subheading: "The pieces our customers come back for.",
-    source: "bestsellers",
+  section("bannerGrid"),
+  section("collectionTabs", {
+    heading: "Shop the edit",
+    subheading: "Three ways in, depending on what you are after.",
     limit: 8,
-    viewAllHref: "/shop?sort=bestselling",
   }),
+  section("marquee"),
+  section("promoBanner"),
+  section("featuredProduct"),
+  section("shopTheLook"),
+  section("usps"),
+  section("stats"),
   section("productCarousel", {
     heading: "Trending Collection",
     subheading: "What's moving quickly right now.",
     source: "trending",
     limit: 10,
   }),
-  section("promoBanner"),
-  section("shopTheLook"),
-  section("usps"),
   section("instagram"),
   section("storeLocation"),
   section("testimonials"),

@@ -6,7 +6,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Package, FolderTree, ReceiptText, Users, Paintbrush,
   Images, TicketPercent, MessageSquareText, ChartNoAxesColumn, Settings,
-  Menu, X, ExternalLink, Palette,
+  Menu, X, ExternalLink, Palette, CreditCard,
 } from "lucide-react";
 
 const GROUPS: { title: string; items: { href: string; label: string; icon: React.ElementType }[] }[] = [
@@ -17,6 +17,7 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: React
       { href: "/admin/orders", label: "Orders", icon: ReceiptText },
       { href: "/admin/products", label: "Products", icon: Package },
       { href: "/admin/categories", label: "Categories", icon: FolderTree },
+      { href: "/admin/payments", label: "Payments", icon: CreditCard },
     ],
   },
   {

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { allCategories } from "@/lib/catalog";
 import { allPages, getDraftPage } from "@/lib/pages";
+import { getSiteSettings } from "@/lib/settings";
 import { WebsiteEditor, type EditorSection } from "@/components/admin/WebsiteEditor";
 
 export default async function EditPageScreen(props: PageProps<"/admin/editor/[slug]">) {
@@ -32,6 +33,7 @@ export default async function EditPageScreen(props: PageProps<"/admin/editor/[sl
       sections={sections}
       hasDraftChanges={draft.page.hasDraftChanges}
       categories={categories}
+      siteSettings={getSiteSettings()}
     />
   );
 }

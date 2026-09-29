@@ -1,6 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronDown, MapPin, Clock, Phone } from "lucide-react";
+import {
+  ChevronDown, MapPin, Clock, Phone, Truck, RefreshCw, Lock, Store, Sparkles, Heart, Gift,
+  MessageCircle,
+} from "lucide-react";
 import { allCategories, productsByIds, productsForSection } from "@/lib/catalog";
 import { activeLooks } from "@/lib/looks";
 import { withDefaults } from "@/lib/sections";
@@ -8,6 +11,8 @@ import { formatPaise } from "@/lib/money";
 import { whatsappLink } from "@/lib/whatsapp";
 import type { SiteSettings } from "@/lib/settings";
 import { SectionHeading } from "@/components/sections/SectionHeading";
+import { SectionTabs } from "@/components/sections/SectionTabs";
+import { Countdown } from "@/components/sections/Countdown";
 import { ProductCarouselBlock, ProductGridBlock, ProductChip } from "@/components/sections/ProductRow";
 import { NewsletterForm } from "@/components/storefront/NewsletterForm";
 import { Stars } from "@/components/ui/Stars";
@@ -109,6 +114,22 @@ export function SectionBlock({
       return <Gallery s={s} />;
     case "announcement":
       return <AnnouncementStrip s={s} />;
+    case "featuredProduct":
+      return <FeaturedProduct s={s} />;
+    case "collectionTabs":
+      return <CollectionTabs s={s} context={context} />;
+    case "trustBadges":
+      return <TrustBadges s={s} />;
+    case "marquee":
+      return <Marquee s={s} />;
+    case "stats":
+      return <Stats s={s} />;
+    case "countdown":
+      return <CountdownSection s={s} />;
+    case "bannerGrid":
+      return <BannerGrid s={s} />;
+    case "specTable":
+      return <SpecTable s={s} />;
     case "spacer":
       return <div style={{ height: `${num(s.height, 48)}px` }} aria-hidden />;
     default:
@@ -913,6 +934,314 @@ function AnnouncementStrip({ s }: { s: S }) {
               </span>
             );
           })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeaturedProduct({ s }: { s: S }) {
+  const picked = Array.isArray(s.productIds) ? (s.productIds as string[]) : [];
+  // Until a product is chosen, show the shop's own featured pick rather than
+  // an empty gap.
+  const [product] =
+    picked.length > 0
+      ? productsByIds(picked)
+      : productsForSection({ source: "featured", limit: 1 });
+  if (!product) return null;
+
+  const imageFirst = str(s.imagePosition, "left") === "left";
+  const image = product.images[0]?.url;
+  const tinted = str(s.background, "surface") === "surface";
+
+  return (
+    <section className="ht-section" style={tinted ? { background: "var(--ht-surface)" } : undefined}>
+      <div className="ht-container grid items-center gap-8 md:grid-cols-2 md:gap-16">
+        <Link
+          href={`/products/${product.slug}`}
+          className={`relative block overflow-hidden ${imageFirst ? "" : "md:order-2"}`}
+          style={{ borderRadius: "var(--ht-radius)", aspectRatio: "4 / 5" }}
+        >
+          {image && (
+            <Image
+              src={image}
+              alt={product.images[0]?.alt || product.name}
+              fill
+              loading="lazy"
+              sizes="(max-width: 768px) 100vw, 45vw"
+              className="object-cover transition duration-700 hover:scale-[1.04]"
+            />
+          )}
+        </Link>
+
+        <div className={imageFirst ? "" : "md:order-1"}>
+          {str(s.eyebrow) && <p className="ht-eyebrow mb-3">{str(s.eyebrow)}</p>}
+          <h2 className="text-[1.8rem] md:text-[2.5rem]">{str(s.heading) || product.name}</h2>
+          <p className="mt-4 text-[0.98rem] leading-relaxed" style={{ color: "var(--ht-muted)" }}>
+            {str(s.body) || product.shortDescription}
+          </p>
+          <p className="mt-5 text-xl">
+            {formatPaise(product.price)}
+            {product.mrp > product.price && (
+              <span className="ml-2 text-sm line-through" style={{ color: "var(--ht-muted)" }}>
+                {formatPaise(product.mrp)}
+              </span>
+            )}
+          </p>
+          <Link href={`/products/${product.slug}`} className="ht-btn ht-btn-primary mt-7">
+            {str(s.buttonLabel, "View product")}
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CollectionTabs({ s, context }: { s: S; context: RenderContext }) {
+  const tabs = list(s.tabs).filter((tab) => str(tab.label));
+  if (tabs.length === 0) return null;
+
+  const limit = num(s.limit, 8);
+  const columns = num(s.columns, 4);
+  const panels = tabs.map((tab) =>
+    productsForSection({
+      source: tab.source,
+      categoryId: tab.categoryId,
+      productIds: tab.productIds,
+      limit,
+    }),
+  );
+  if (panels.every((products) => products.length === 0)) return null;
+
+  return (
+    <section className="ht-section">
+      <div className="ht-container">
+        <SectionHeading heading={str(s.heading)} subheading={str(s.subheading)} />
+        <SectionTabs labels={tabs.map((tab) => str(tab.label))}>
+          {panels.map((products, i) => (
+            <ProductGridBlock
+              key={i}
+              products={products}
+              columns={columns}
+              wishlist={context.wishlist}
+            />
+          ))}
+        </SectionTabs>
+      </div>
+    </section>
+  );
+}
+
+const BADGE_ICONS = {
+  truck: Truck,
+  refresh: RefreshCw,
+  lock: Lock,
+  store: Store,
+  sparkles: Sparkles,
+  heart: Heart,
+  gift: Gift,
+  chat: MessageCircle,
+} as const;
+
+function TrustBadges({ s }: { s: S }) {
+  const items = list(s.items);
+  if (items.length === 0) return null;
+  const tinted = str(s.background, "surface") === "surface";
+
+  return (
+    <section
+      className="py-10 md:py-12"
+      style={tinted ? { background: "var(--ht-surface)" } : undefined}
+    >
+      <div className="ht-container">
+        <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-4">
+          {items.map((item, i) => {
+            const Icon = BADGE_ICONS[str(item.icon, "sparkles") as keyof typeof BADGE_ICONS] ?? Sparkles;
+            return (
+              <div key={i} className="flex items-start gap-3">
+                <Icon size={20} strokeWidth={1.4} className="mt-0.5 shrink-0" style={{ color: "var(--ht-primary)" }} />
+                <div>
+                  <p className="text-[0.92rem] font-medium">{str(item.title)}</p>
+                  {str(item.body) && (
+                    <p className="mt-0.5 text-[0.82rem]" style={{ color: "var(--ht-muted)" }}>
+                      {str(item.body)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Marquee({ s }: { s: S }) {
+  const items = list(s.items).filter((item) => str(item.text));
+  if (items.length === 0) return null;
+
+  const durations: Record<string, string> = { slow: "48s", medium: "32s", fast: "20s" };
+  // The track is printed twice so the loop can restart without a visible seam.
+  const track = [...items, ...items];
+
+  return (
+    <section
+      className="overflow-hidden py-3"
+      style={{ background: str(s.background, "#2f2925"), color: str(s.textColor, "#ffffff") }}
+    >
+      <div
+        className="ht-marquee"
+        style={{ ["--ht-marquee-duration" as string]: durations[str(s.speed, "medium")] ?? "32s" }}
+      >
+        {track.map((item, i) => (
+          <span
+            key={i}
+            className="flex items-center gap-8 whitespace-nowrap px-4 text-[0.8rem] uppercase tracking-[0.18em]"
+            aria-hidden={i >= items.length}
+          >
+            {str(item.text)}
+            <span style={{ opacity: 0.4 }}>✦</span>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Stats({ s }: { s: S }) {
+  const items = list(s.items).filter((item) => str(item.value));
+  if (items.length === 0) return null;
+
+  return (
+    <section className="ht-section">
+      <div className="ht-container">
+        {(str(s.heading) || str(s.subheading)) && (
+          <SectionHeading heading={str(s.heading)} subheading={str(s.subheading)} />
+        )}
+        <div className="grid grid-cols-2 gap-8 text-center lg:grid-cols-4">
+          {items.map((item, i) => (
+            <div key={i}>
+              <p className="font-serif text-[2.2rem] leading-none md:text-[2.8rem]">{str(item.value)}</p>
+              <p className="mt-2 text-[0.82rem]" style={{ color: "var(--ht-muted)" }}>
+                {str(item.label)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CountdownSection({ s }: { s: S }) {
+  const endsAt = str(s.endsAt);
+
+  return (
+    <section className="ht-section">
+      <div className="ht-container">
+        <div
+          className="px-6 py-12 text-center md:px-16"
+          style={{ borderRadius: "var(--ht-radius)", background: str(s.background, "#f3e3e0") }}
+        >
+          <h2 className="text-[1.7rem] md:text-[2.3rem]">{str(s.heading)}</h2>
+          {str(s.body) && <p className="mx-auto mt-3 max-w-md text-[0.98rem]">{str(s.body)}</p>}
+
+          {endsAt ? (
+            <Countdown endsAt={endsAt} expiredText={str(s.expiredText, "This offer has ended.")} />
+          ) : (
+            <p className="mt-5 text-sm" style={{ color: "var(--ht-muted)" }}>
+              Set a finish date and time in the editor to start the clock.
+            </p>
+          )}
+
+          {str(s.buttonLabel) && (
+            <Link href={str(s.buttonHref, "/shop")} className="ht-btn ht-btn-primary mt-7">
+              {str(s.buttonLabel)}
+            </Link>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BannerGrid({ s }: { s: S }) {
+  const items = list(s.items).filter((item) => str(item.imageUrl));
+  if (items.length === 0) return null;
+  const ratio = str(s.height, "tall") === "tall" ? "3 / 4" : "4 / 3";
+  const columns = Math.min(items.length, 4);
+
+  return (
+    <section className="ht-section">
+      <div className="ht-container">
+        {(str(s.heading) || str(s.subheading)) && (
+          <SectionHeading heading={str(s.heading)} subheading={str(s.subheading)} />
+        )}
+        <div
+          className="grid gap-4 md:gap-5"
+          style={{ gridTemplateColumns: `repeat(${Math.min(columns, 2)}, minmax(0, 1fr))` }}
+        >
+          {items.map((item, i) => (
+            <Link
+              key={i}
+              href={str(item.href, "/shop")}
+              className="group relative block overflow-hidden"
+              style={{ borderRadius: "var(--ht-radius)", aspectRatio: ratio }}
+            >
+              <Image
+                src={str(item.imageUrl)}
+                alt={str(item.title)}
+                fill
+                loading="lazy"
+                sizes="(max-width: 768px) 50vw, 50vw"
+                className="object-cover transition duration-700 group-hover:scale-[1.05]"
+              />
+              <span
+                className="absolute inset-0"
+                style={{ background: "linear-gradient(to top, rgba(38,32,28,0.6), transparent 55%)" }}
+              />
+              <span className="absolute inset-x-5 bottom-5 text-white">
+                <span className="block font-serif text-xl md:text-2xl">{str(item.title)}</span>
+                {str(item.body) && (
+                  <span className="mt-1 block text-[0.8rem]" style={{ opacity: 0.86 }}>
+                    {str(item.body)}
+                  </span>
+                )}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SpecTable({ s }: { s: S }) {
+  const rows = list(s.rows).filter((row) => str(row.left) || str(row.right));
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="ht-section">
+      <div className="ht-container max-w-3xl">
+        <SectionHeading heading={str(s.heading)} subheading={str(s.subheading)} />
+        <div className="overflow-hidden" style={{ borderRadius: "var(--ht-radius)", border: "1px solid var(--ht-border)" }}>
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr style={{ background: "var(--ht-surface)" }}>
+                <th className="px-5 py-3 font-medium">{str(s.leftHeading, "Item")}</th>
+                <th className="px-5 py-3 font-medium">{str(s.rightHeading, "Detail")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i} style={{ borderTop: "1px solid var(--ht-border)" }}>
+                  <td className="px-5 py-3">{str(row.left)}</td>
+                  <td className="px-5 py-3" style={{ color: "var(--ht-muted)" }}>{str(row.right)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </section>

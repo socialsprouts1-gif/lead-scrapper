@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { customerByKey } from "@/lib/orders";
+import { customerProfile } from "@/lib/customers";
 import { formatPaise } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_TONE } from "@/lib/order-status";
 import { getSiteSettings } from "@/lib/settings";
 import { whatsappLink } from "@/lib/whatsapp";
 import { AdminPage, PageHeader, Pill, StatCard } from "@/components/admin/ui";
+import { CustomerProfileCard } from "@/components/admin/CustomerProfileCard";
 
 export default async function AdminCustomerPage(props: PageProps<"/admin/customers/[id]">) {
   const { id } = await props.params;
@@ -16,12 +18,13 @@ export default async function AdminCustomerPage(props: PageProps<"/admin/custome
   if (!customer) notFound();
 
   const lastOrder = customer.orders[0];
+  const profile = customerProfile(customer.email);
 
   return (
     <AdminPage>
       <PageHeader
         title={customer.name}
-        description={`${customer.email} · ${customer.phone}`}
+        description={`${customer.email} · ${customer.phone}${profile.isBlocked ? " · Blocked from ordering" : ""}`}
         back={{ href: "/admin/customers", label: "Customers" }}
       >
         {customer.phone && (
@@ -99,7 +102,13 @@ export default async function AdminCustomerPage(props: PageProps<"/admin/custome
           </div>
         </div>
 
-        {lastOrder && (
+        <div className="space-y-5">
+          <CustomerProfileCard
+            email={customer.email}
+            initial={{ note: profile.note, tags: profile.tags, isBlocked: profile.isBlocked }}
+          />
+
+          {lastOrder && (
           <div className="adm-card p-5">
             <h2 className="mb-3 text-base">Most recent address</h2>
             <address className="text-sm not-italic leading-relaxed" style={{ color: "var(--adm-muted)" }}>
@@ -110,7 +119,8 @@ export default async function AdminCustomerPage(props: PageProps<"/admin/custome
               {lastOrder.customerPhone}
             </address>
           </div>
-        )}
+          )}
+        </div>
       </div>
     </AdminPage>
   );

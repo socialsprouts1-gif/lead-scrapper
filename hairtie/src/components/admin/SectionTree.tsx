@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ChevronDown, ChevronRight, Copy, Eye, EyeOff, GripVertical, Lock, Plus, Trash2,
+  ChevronDown, ChevronRight, Copy, Eye, EyeOff, GripVertical, Plus, Trash2,
 } from "lucide-react";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -387,20 +387,40 @@ function ChevronDownIcon({ size }: { size: number }) {
   return <ChevronDown size={size} strokeWidth={2} />;
 }
 
-/** Header and footer are shared across every page, so they live in Settings. */
-export function LockedRow({ label, hint, href }: { label: string; hint: string; href: string }) {
+/**
+ * Header and footer sit outside the page's section list — they belong to every
+ * page — but they are edited in the same panel, so they get a row of their own.
+ */
+export function GlobalRow({
+  label,
+  hint,
+  icon,
+  isSelected,
+  onSelect,
+}: {
+  label: string;
+  hint: string;
+  icon: React.ReactNode;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
   return (
-    <a
-      href={href}
-      className="flex items-center gap-2 rounded-lg px-2 py-2 text-[0.82rem] transition hover:bg-[var(--adm-bg)]"
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[0.82rem] transition hover:bg-[var(--adm-bg)]"
+      style={{
+        background: isSelected ? "var(--adm-bg)" : "transparent",
+        boxShadow: isSelected ? "inset 2px 0 0 var(--adm-text)" : undefined,
+      }}
     >
-      <Lock size={12} strokeWidth={1.8} style={{ color: "var(--adm-muted)" }} />
+      <span style={{ color: "var(--adm-muted)" }}>{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>
         <span className="block truncate text-[0.66rem]" style={{ color: "var(--adm-muted)" }}>
           {hint}
         </span>
       </span>
-    </a>
+    </button>
   );
 }

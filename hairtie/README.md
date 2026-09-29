@@ -81,11 +81,17 @@ Mobile-first throughout: sticky header, bottom navigation, swipeable product
 images, a sticky add-to-bag bar and a WhatsApp button on every screen.
 
 ### Admin panel
-Dashboard · Orders · Products · Categories · Website Editor · Appearance · Media ·
-Customers · Discounts · Reviews · Analytics · Store Settings.
+Dashboard · Orders · Products · Categories · Payments · Website Editor ·
+Appearance · Media · Customers · Discounts · Reviews · Analytics · Store Settings.
 
-Customers are derived from order history rather than stored as accounts — one row
-per email address, with everything that person has bought.
+- **Orders** — search and filter, tick several and confirm, pack, ship, deliver
+  or cancel them in one go, per-order courier and tracking, refunds, invoices,
+  and a CSV export.
+- **Products** — full editor with variants, images, specifications and SEO;
+  bulk publish / draft / archive / delete; inline stock edits; CSV export.
+- **Customers** — derived from order history rather than accounts, one row per
+  email address. Add your own tags and notes, block an address from ordering
+  (checkout then refuses it), filter by tag or block, and export to CSV.
 
 ### Visual website editor
 A theme-editor-style builder: a section tree on the left, the section's settings
@@ -105,17 +111,32 @@ beside it, and the real page on the right.
   spot; the picker is searchable and grouped.
 - **Undo / redo** — ⌘Z and ⌘⇧Z, up to 60 steps, covering edits, reorders and
   deletions alike.
+- **Header and footer too** — both are edited in the same panel, with a
+  drag-and-drop menu builder (including dropdown links) and drag-and-drop footer
+  columns. They belong to every page, so they save straight away rather than
+  waiting for Publish; the panel says so.
 - **Desktop / tablet / mobile** previews, plus a full-width mode.
 
-Edits save as you type into a **draft**; the public site only changes when you
-press **Publish**, and **Discard** restores the last published version. Twenty-one
-section types ship with it.
+Page edits save as you type into a **draft**; the public site only changes when
+you press **Publish**, and **Discard** restores the last published version.
+Twenty-nine section types ship with it.
 
 ### Payments
-Cash on Delivery works out of the box. Razorpay (UPI, cards, net banking, wallets)
-activates as soon as the keys are present. Totals are always recalculated on the
-server, stock is verified before an order is written, and payments are only
-accepted after the Razorpay signature is verified.
+Configured from **Admin → Payments**, with nothing to redeploy:
+
+- **Cash on Delivery** — on or off, an optional handling charge, and a minimum
+  and maximum order value it applies to.
+- **Online payment** — Razorpay (UPI, cards, net banking, wallets). Paste the
+  Key ID and Key Secret, press **Test connection**, and it goes live. A test-mode
+  flag warns if a live key is used while test mode is still ticked.
+- Keys entered here are stored server-side and never sent to a browser: the page
+  is told only *whether* a secret is set. Leave a field blank and the matching
+  environment variable is used instead, so a deployment can still be configured
+  entirely through its hosting environment.
+
+Totals are always recalculated on the server, stock is verified before an order
+is written, and payments are only accepted after the Razorpay signature is
+verified.
 
 ### SEO
 Per-product and per-page titles, descriptions, keywords, canonical URLs and Open
@@ -132,8 +153,8 @@ None are required. Each one only switches on an extra feature — see
 | Variable | What it does |
 | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | Public address, for canonical URLs and the sitemap. Also settable in Admin → Store Settings. |
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Turns on online payment. Without them, checkout is Cash on Delivery only. |
-| `RAZORPAY_WEBHOOK_SECRET` | Verifies Razorpay webhooks at `/api/payments/razorpay/webhook`. |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Fallback for online payment when the fields in Admin → Payments are blank. Without either, checkout is Cash on Delivery only. |
+| `RAZORPAY_WEBHOOK_SECRET` | Fallback webhook secret for `/api/payments/razorpay/webhook`. |
 | `MEDIA_DRIVER` | `local` (default) or `supabase`. |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_STORAGE_BUCKET` | Where uploaded images go when `MEDIA_DRIVER=supabase`. |
 
@@ -157,8 +178,10 @@ None are required. Each one only switches on an extra feature — see
     └── lib/
         ├── store.ts        # the JSON document: load, save, mutate
         ├── types.ts        # the data model
-        ├── catalog.ts · cart.ts · orders.ts · pages.ts · settings.ts
-        └── seo.ts · storage.ts · razorpay.ts · whatsapp.ts
+        ├── sections.ts     # the block registry both the editor and site read
+        ├── payments.ts     # gateway keys — server-only, never serialised out
+        ├── catalog.ts · cart.ts · orders.ts · customers.ts · pages.ts · settings.ts
+        └── seo.ts · storage.ts · razorpay.ts · csv.ts · whatsapp.ts
 ```
 
 ### Where to change things

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
@@ -236,30 +238,15 @@ export function SettingsForm({ initial }: { initial: SiteSettings }) {
             />
           </Field>
 
-          <div className="space-y-3 border-t pt-5" style={{ borderColor: "var(--adm-line)" }}>
+          <div className="space-y-2 border-t pt-5" style={{ borderColor: "var(--adm-line)" }}>
             <h3 className="text-base">Payment options</h3>
-            <label className="flex items-center gap-2.5 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={values.shipping.codEnabled}
-                onChange={(e) => patch({ shipping: { ...values.shipping, codEnabled: e.target.checked } })}
-              />
-              Offer Cash on Delivery
-            </label>
-            <label className="flex items-center gap-2.5 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={values.shipping.onlinePaymentEnabled}
-                onChange={(e) => patch({ shipping: { ...values.shipping, onlinePaymentEnabled: e.target.checked } })}
-              />
-              Offer online payment (UPI, cards, net banking)
-            </label>
             <p className="adm-hint">
-              Online payment also needs your Razorpay keys set as environment variables on the server. Until
-              they are, the option stays hidden at checkout even when it is ticked here.
+              Cash on Delivery, online payment and your gateway keys now live on their own screen, so the
+              secrets stay out of this form.
             </p>
+            <Link href="/admin/payments" className="adm-btn adm-btn-ghost adm-btn-sm">
+              Open payment settings
+            </Link>
           </div>
         </div>
       )}

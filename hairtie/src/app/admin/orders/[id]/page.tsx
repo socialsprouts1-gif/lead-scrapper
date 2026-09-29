@@ -89,6 +89,7 @@ export default async function AdminOrderPage(props: PageProps<"/admin/orders/[id
                 <Row label={`Discount${order.couponCode ? ` (${order.couponCode})` : ""}`} value={`− ${formatPaise(order.discountAmount)}`} />
               )}
               <Row label="Shipping" value={order.shippingFee === 0 ? "Free" : formatPaise(order.shippingFee)} />
+              {order.codFee > 0 && <Row label="Cash on Delivery charge" value={formatPaise(order.codFee)} />}
               <Row label="GST included" value={formatPaise(order.taxAmount)} muted />
               <div className="flex justify-between border-t pt-3 text-base" style={{ borderColor: "var(--adm-line)" }}>
                 <dt>Total</dt>

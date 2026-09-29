@@ -116,6 +116,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/orders/[ord
     <div><span class="muted">Subtotal</span><span>${formatPaise(order.subtotal)}</span></div>
     ${order.discountAmount > 0 ? `<div><span class="muted">Discount${order.couponCode ? ` (${escape(order.couponCode)})` : ""}</span><span>− ${formatPaise(order.discountAmount)}</span></div>` : ""}
     <div><span class="muted">Shipping</span><span>${order.shippingFee === 0 ? "Free" : formatPaise(order.shippingFee)}</span></div>
+    ${order.codFee > 0 ? `<div><span class="muted">Cash on Delivery charge</span><span>${formatPaise(order.codFee)}</span></div>` : ""}
     <div class="grand"><span>Total</span><span>${formatPaise(order.total)}</span></div>
     <div><span class="muted">Includes GST</span><span class="muted">${formatPaise(order.taxAmount)}</span></div>
   </div>

@@ -129,3 +129,41 @@ export async function recordRefund(
   revalidatePath("/admin/orders");
   return { ok: true, message: "Refund recorded." };
 }
+
+/**
+ * Applies one status change to several orders at once, from the tick boxes on
+ * the orders list. Each order still goes through `changeOrderStatus`, so stock
+ * and the order's own history stay correct.
+ */
+export async function bulkOrderAction(orderIds: string[], status: string): Promise<AdminResult> {
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return { ok: false, message: "Nothing was selected." };
+  }
+  if (!STATUSES.includes(status as OrderStatus)) {
+    return { ok: false, message: "That is not an order status." };
+  }
+
+  let changed = 0;
+  const problems: string[] = [];
+
+  for (const orderId of orderIds) {
+    try {
+      changeOrderStatus(orderId, status as OrderStatus, ACTOR);
+      changed += 1;
+    } catch (error) {
+      problems.push(error instanceof Error ? error.message : "Could not update that order.");
+    }
+  }
+
+  revalidatePath("/admin/orders");
+  if (changed === 0) {
+    return { ok: false, message: problems[0] ?? "None of those orders could be updated." };
+  }
+  return {
+    ok: true,
+    message:
+      problems.length > 0
+        ? `${changed} updated. ${problems.length} could not be: ${problems[0]}`
+        : `${changed} ${changed === 1 ? "order" : "orders"} updated.`,
+  };
+}

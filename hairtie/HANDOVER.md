@@ -26,6 +26,7 @@ The menu on the left is grouped by how often you'll use it.
 | **Orders** | Every order. Open one to confirm it, add tracking, or print an invoice. |
 | **Products** | Add, edit, price and stock your products. |
 | **Categories** | The groups customers browse by, such as Claw Clips or Tote Bags. |
+| **Payments** | Turn Cash on Delivery and online payment on or off, and connect your payment account. |
 
 **Your website**
 
@@ -39,7 +40,7 @@ The menu on the left is grouped by how often you'll use it.
 
 | | |
 | --- | --- |
-| **Customers** | Who has bought from you, what they've spent. |
+| **Customers** | Who has bought from you, what they've spent, your notes about them. |
 | **Discounts** | Coupon codes to share on Instagram. |
 | **Reviews** | Customer reviews waiting for you to publish. |
 | **Analytics** | Sales over time, best sellers, categories that sell. |
@@ -101,8 +102,61 @@ it on the order so your records match.
 **Messaging a customer:** the *Message customer* button opens WhatsApp with their
 number already filled in.
 
+### Doing several at once
+On the orders list, tick the box beside each order you want and a bar appears at
+the top: **Confirm**, **Mark packing**, **Mark shipped**, **Mark delivered** or
+**Cancel orders**. Handy on a busy morning. Cancelling in bulk still puts every
+item back into stock, one order at a time.
+
+**Export CSV** at the top of the list downloads every order — names, addresses,
+contents and totals — as a spreadsheet you can open in Excel.
+
+### Customers
 **Customers** builds itself from your orders — there are no accounts to manage.
 Each person appears once, with everything they have bought.
+
+Open someone and you can add:
+
+- **Tags** — *VIP*, *Wholesale*, *Needs follow-up*, or anything you type. You can
+  filter the list by tagged customers later.
+- **A note** — "prefers pastel shades", "always asks for gift wrap". Only you see
+  it.
+- **Block from ordering** — for the rare troublesome buyer. Checkout then refuses
+  any new order from that email address and tells them to get in touch.
+
+There is an **Export CSV** button here too.
+
+---
+
+## 3b. Taking payments
+
+**Payments.**
+
+Two ways to be paid, and you control both:
+
+**Cash on Delivery** works from the moment you switch it on — nothing to sign up
+for. You can also set:
+
+- a **handling charge** added to COD orders (leave it at 0 for none),
+- a **minimum** and **maximum** order value COD applies to, so a very large order
+  has to be paid for up front.
+
+**Online payment** (UPI, cards, net banking, wallets) goes through Razorpay:
+
+1. Open a Razorpay account and go to its API keys page — the **Get your keys**
+   button takes you there.
+2. Copy the **Key ID** and **Key Secret** into this page and press **Save**.
+3. Press **Test connection**. If it says Razorpay accepted them, you're done.
+4. While you are trying it out, leave **This is a test account** ticked. Untick
+   it when you switch to your live keys — the page warns you if you forget.
+
+> **Your Key Secret is never shown again.** It is stored on your server, not in
+> your browser. If you ever need to change it, just type the new one in; leave the
+> field alone and the saved one is kept.
+
+The top of the page always says where things stand — whether COD is on, whether
+online payment is actually connected, and whether your keys came from this page
+or from your hosting settings.
 
 ---
 

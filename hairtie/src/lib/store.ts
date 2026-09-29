@@ -2,10 +2,12 @@ import "server-only";
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import path from "node:path";
 import { buildSeed } from "@/data/seed";
+import { DEFAULT_PAYMENT_SETTINGS, type PaymentSettings } from "@/lib/payment-settings";
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from "@/lib/site-settings";
 import { DEFAULT_THEME, type ThemeSettings } from "@/lib/theme";
 import type {
-  Cart, Category, Coupon, Look, MediaAsset, NewsletterSignup, Order, Page, Product, Review,
+  Cart, Category, Coupon, CustomerProfile, Look, MediaAsset, NewsletterSignup, Order, Page,
+  Product, Review,
 } from "@/lib/types";
 
 /**
@@ -34,6 +36,10 @@ export type Store = {
   carts: Cart[];
   newsletter: NewsletterSignup[];
   settings: SiteSettings;
+  /** Gateway keys live here and are never sent to the browser. */
+  payments: PaymentSettings;
+  /** Shop-owner notes and tags, keyed by the customer's email address. */
+  customerProfiles: CustomerProfile[];
   theme: { published: ThemeSettings; draft: ThemeSettings | null };
 };
 
@@ -47,12 +53,27 @@ type Cache = { store: Store; persistent: boolean; warned: boolean };
 // shop's state on every edit.
 const globalForStore = globalThis as unknown as { hairtieStore?: Cache };
 
-function emptyDefaults(): Pick<Store, "settings" | "theme" | "version"> {
+function emptyDefaults(): Pick<
+  Store,
+  "settings" | "payments" | "customerProfiles" | "theme" | "version"
+> {
   return {
     version: STORE_VERSION,
     settings: DEFAULT_SITE_SETTINGS,
+    payments: DEFAULT_PAYMENT_SETTINGS,
+    customerProfiles: [],
     theme: { published: DEFAULT_THEME, draft: null },
   };
+}
+
+/**
+ * Fills in fields added after a shop was first saved, so an older
+ * `.data/hairtie.json` keeps working without a migration step.
+ */
+function backfill(data: Store) {
+  for (const order of data.orders ?? []) {
+    order.codFee ??= 0;
+  }
 }
 
 function load(): Cache {
@@ -61,7 +82,9 @@ function load(): Cache {
     const raw = readFileSync(DATA_FILE, "utf8");
     const parsed = JSON.parse(raw) as Store;
     if (parsed && parsed.version === STORE_VERSION && Array.isArray(parsed.products)) {
-      return { store: { ...emptyDefaults(), ...parsed }, persistent: true, warned: false };
+      const merged = { ...emptyDefaults(), ...parsed };
+      backfill(merged);
+      return { store: merged, persistent: true, warned: false };
     }
   } catch {
     // No saved file yet, or it is unreadable — fall through and seed.

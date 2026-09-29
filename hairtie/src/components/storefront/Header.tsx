@@ -115,14 +115,25 @@ export function Header({
           </Link>
 
           <nav className="hidden items-center gap-7 lg:flex" aria-label="Main">
-            {settings.header.menu.map((item) => {
-              const group = categories.find((c) => `/categories/${c.slug}` === item.href);
-              if (group && group.children.length > 0) {
+            {settings.header.menu.map((item, index) => {
+              // An item can carry its own dropdown links; otherwise the
+              // sub-categories of the category it points at are used.
+              const category = categories.find((c) => `/categories/${c.slug}` === item.href);
+              const children =
+                item.children && item.children.length > 0
+                  ? item.children
+                  : (category?.children ?? []).map((child) => ({
+                      label: child.name,
+                      href: `/categories/${child.slug}`,
+                    }));
+              const groupKey = `${item.href}-${index}`;
+
+              if (children.length > 0) {
                 return (
                   <div
-                    key={item.href}
+                    key={groupKey}
                     className="relative"
-                    onMouseEnter={() => setOpenGroup(group.slug)}
+                    onMouseEnter={() => setOpenGroup(groupKey)}
                     onMouseLeave={() => setOpenGroup(null)}
                   >
                     <Link
@@ -132,7 +143,7 @@ export function Header({
                       {item.label}
                       <ChevronDown size={13} strokeWidth={1.6} />
                     </Link>
-                    {openGroup === group.slug && (
+                    {openGroup === groupKey && (
                       <div
                         className="absolute left-1/2 top-full w-56 -translate-x-1/2 overflow-hidden pt-2"
                       >
@@ -140,13 +151,13 @@ export function Header({
                           className="ht-card overflow-hidden py-2"
                           style={{ boxShadow: "0 24px 50px -30px rgba(47,41,37,0.5)" }}
                         >
-                          {group.children.map((child) => (
+                          {children.map((child) => (
                             <Link
-                              key={child.slug}
-                              href={`/categories/${child.slug}`}
+                              key={`${child.href}-${child.label}`}
+                              href={child.href}
                               className="block px-4 py-2 text-sm transition hover:opacity-60"
                             >
-                              {child.name}
+                              {child.label}
                             </Link>
                           ))}
                         </div>
@@ -157,7 +168,7 @@ export function Header({
               }
               return (
                 <Link
-                  key={`${item.href}-${item.label}`}
+                  key={groupKey}
                   href={item.href}
                   className="py-2 text-[0.8rem] uppercase tracking-[0.13em] ht-underline"
                 >

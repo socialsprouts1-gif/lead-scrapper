@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { store } from "@/lib/store";
 import { customerSummaries } from "@/lib/orders";
+import { allCustomerProfiles } from "@/lib/customers";
 import { formatPaise } from "@/lib/money";
 import { formatDate } from "@/lib/utils";
 import { AdminPage, EmptyState, PageHeader, Pagination } from "@/components/admin/ui";
@@ -22,6 +23,7 @@ export default async function AdminCustomersPage(props: PageProps<"/admin/custom
 
   const newsletter = store().newsletter;
   const subscribed = new Set(newsletter.map((entry) => entry.email));
+  const profiles = new Map(allCustomerProfiles().map((profile) => [profile.email, profile]));
 
   const matched = customerSummaries().filter((customer) => {
     if (q) {
@@ -33,6 +35,8 @@ export default async function AdminCustomersPage(props: PageProps<"/admin/custom
     }
     if (filter === "repeat" && customer.orderCount < 2) return false;
     if (filter === "newsletter" && !subscribed.has(customer.email)) return false;
+    if (filter === "blocked" && !profiles.get(customer.key)?.isBlocked) return false;
+    if (filter === "tagged" && !(profiles.get(customer.key)?.tags.length)) return false;
     return true;
   });
 
@@ -55,7 +59,11 @@ export default async function AdminCustomersPage(props: PageProps<"/admin/custom
       <PageHeader
         title="Customers"
         description={`${total} ${total === 1 ? "person has" : "people have"} ordered from you. ${newsletter.length} on the mailing list.`}
-      />
+      >
+        <a href="/api/admin/export/customers" className="adm-btn adm-btn-ghost" download>
+          Export CSV
+        </a>
+      </PageHeader>
 
       <Suspense fallback={<div className="h-10" />}>
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -67,6 +75,8 @@ export default async function AdminCustomersPage(props: PageProps<"/admin/custom
             options={[
               { value: "repeat", label: "Ordered more than once" },
               { value: "newsletter", label: "On the mailing list" },
+              { value: "tagged", label: "Tagged" },
+              { value: "blocked", label: "Blocked" },
             ]}
           />
         </div>
@@ -85,6 +95,7 @@ export default async function AdminCustomersPage(props: PageProps<"/admin/custom
                 <thead>
                   <tr>
                     <th>Customer</th>
+                    <th>Tags</th>
                     <th>Orders</th>
                     <th>Total spent</th>
                     <th>Last order</th>
@@ -103,6 +114,20 @@ export default async function AdminCustomersPage(props: PageProps<"/admin/custom
                         </Link>
                         <div className="text-xs" style={{ color: "var(--adm-muted)" }}>
                           {customer.email} · {customer.phone}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap gap-1">
+                          {profiles.get(customer.key)?.isBlocked && (
+                            <span className="adm-pill" style={{ background: "#f7e7e4", color: "#9c3a3a" }}>
+                              Blocked
+                            </span>
+                          )}
+                          {(profiles.get(customer.key)?.tags ?? []).map((tag) => (
+                            <span key={tag} className="adm-pill" style={{ background: "var(--adm-bg)", color: "var(--adm-muted)" }}>
+                              {tag}
+                            </span>
+                          ))}
                         </div>
                       </td>
                       <td>{customer.orderCount}</td>

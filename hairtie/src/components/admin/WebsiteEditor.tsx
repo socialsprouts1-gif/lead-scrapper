@@ -9,19 +9,22 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
-  ChevronLeft, Layers, Maximize2, Minimize2, Monitor, Palette, Plus, Redo2, Smartphone,
-  Tablet, Undo2,
+  ChevronLeft, Layers, Maximize2, Minimize2, Monitor, Palette, PanelBottom, PanelTop, Plus,
+  Redo2, Smartphone, Tablet, Undo2,
 } from "lucide-react";
 import { discardPageChanges, publishPageChanges, replacePageSections } from "@/app/actions/admin/editor";
+import { updateSiteSettings } from "@/app/actions/admin/settings";
+import type { SiteSettings } from "@/lib/site-settings";
 import {
   blankBlock, getBlocksField, getSectionDef, readBlocks, withDefaults, type EditorSection,
 } from "@/lib/sections";
 import { SectionField, type PickerData } from "@/components/admin/SectionFields";
 import { AddSectionPanel } from "@/components/admin/AddSectionPanel";
 import {
-  LockedRow, SectionTree, isBlockDragId, parseBlockDragId,
+  GlobalRow, SectionTree, isBlockDragId, parseBlockDragId,
   type Selection, type TreeOps,
 } from "@/components/admin/SectionTree";
+import { FooterPanel, HeaderPanel } from "@/components/admin/GlobalPanels";
 import { useToast } from "@/components/ui/Toast";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -66,6 +69,7 @@ export function WebsiteEditor({
   sections: initialSections,
   hasDraftChanges,
   categories,
+  siteSettings,
 }: {
   pageId: string;
   slug: string;
@@ -74,6 +78,7 @@ export function WebsiteEditor({
   sections: EditorSection[];
   hasDraftChanges: boolean;
   categories: PickerData["categories"];
+  siteSettings: SiteSettings;
 }) {
   const router = useRouter();
   const { show } = useToast();
@@ -92,6 +97,16 @@ export function WebsiteEditor({
   const [dragging, setDragging] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [pending, start] = useTransition();
+
+  // The header and footer are shared by every page, so they are not part of
+  // this page's draft: they save straight away and the panel says so.
+  const [globalPanel, setGlobalPanel] = useState<"header" | "footer" | null>(null);
+  const [settings, setSettings] = useState(siteSettings);
+  const [syncedSettings, setSyncedSettings] = useState(siteSettings);
+  if (syncedSettings !== siteSettings) {
+    setSyncedSettings(siteSettings);
+    setSettings(siteSettings);
+  }
 
   // Re-sync with the server after publish / discard, without an effect.
   const [synced, setSynced] = useState(initialSections);
@@ -415,6 +430,35 @@ export function WebsiteEditor({
     apply(arrayMove(sections, from, to));
   }
 
+  /* -------------------------------------------------- header and footer */
+
+  const [savingSettings, setSavingSettings] = useState(false);
+  const settingsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function openGlobal(panel: "header" | "footer") {
+    setGlobalPanel((current) => (current === panel ? null : panel));
+    setSelection(null);
+  }
+
+  /**
+   * Header and footer changes are not part of the page draft, so they are
+   * saved as the admin types and the preview is reloaded to show them.
+   */
+  function patchSettings(next: SiteSettings) {
+    setSettings(next);
+    setSavingSettings(true);
+    if (settingsTimer.current) clearTimeout(settingsTimer.current);
+    settingsTimer.current = setTimeout(async () => {
+      const result = await updateSiteSettings(next);
+      setSavingSettings(false);
+      if (!result.ok) {
+        show(result.message ?? "Could not save that change.", "error");
+        return;
+      }
+      setReloadToken((token) => token + 1);
+    }, 700);
+  }
+
   /* ------------------------------------------------------------- settings */
 
   const selectedSection = sections.find((section) => section.id === selection?.sectionId) ?? null;
@@ -600,15 +644,7 @@ export function WebsiteEditor({
         </div>
       </header>
 
-      <DndContext
-        id="page-tree"
-        sensors={sensors}
-        collisionDetection={collideWithinList}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragCancel={() => setDragging(null)}
-      >
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           {!zen && (
             <aside
               className="flex w-full shrink-0 flex-col border-b lg:w-72 lg:min-h-0 lg:overflow-hidden lg:border-b-0 lg:border-r"
@@ -628,7 +664,13 @@ export function WebsiteEditor({
               </div>
 
               <div className="shrink-0 px-3">
-                <LockedRow label="Header" hint="Logo, menu and search — shared by every page" href="/admin/settings" />
+                <GlobalRow
+                  label="Header"
+                  hint="Logo, announcement bar and menu"
+                  icon={<PanelTop size={13} strokeWidth={1.8} />}
+                  isSelected={globalPanel === "header"}
+                  onSelect={() => openGlobal("header")}
+                />
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1">
@@ -642,18 +684,43 @@ export function WebsiteEditor({
                     This page is empty — add your first section.
                   </button>
                 ) : (
-                  <SectionTree
-                    sections={sections}
-                    selection={selection}
-                    hoveredId={hoveredId}
-                    expanded={expanded}
-                    ops={ops}
-                  />
+                  <DndContext
+                    id="page-tree"
+                    sensors={sensors}
+                    collisionDetection={collideWithinList}
+                    onDragStart={onDragStart}
+                    onDragEnd={onDragEnd}
+                    onDragCancel={() => setDragging(null)}
+                  >
+                    <SectionTree
+                      sections={sections}
+                      selection={selection}
+                      hoveredId={hoveredId}
+                      expanded={expanded}
+                      ops={ops}
+                    />
+                    <DragOverlay dropAnimation={null}>
+                      {dragging ? (
+                        <div
+                          className="rounded-lg px-3 py-2 text-[0.8rem] shadow-lg"
+                          style={{ background: "var(--adm-surface)", border: "1px solid var(--adm-line)" }}
+                        >
+                          {dragLabel(sections, dragging)}
+                        </div>
+                      ) : null}
+                    </DragOverlay>
+                  </DndContext>
                 )}
               </div>
 
               <div className="shrink-0 px-3">
-                <LockedRow label="Footer" hint="Links, contact details and socials" href="/admin/settings" />
+                <GlobalRow
+                  label="Footer"
+                  hint="About text, link columns and socials"
+                  icon={<PanelBottom size={13} strokeWidth={1.8} />}
+                  isSelected={globalPanel === "footer"}
+                  onSelect={() => openGlobal("footer")}
+                />
               </div>
 
               <div className="mt-1 shrink-0 border-t px-3 py-3" style={{ borderColor: "var(--adm-line)" }}>
@@ -677,7 +744,49 @@ export function WebsiteEditor({
             </aside>
           )}
 
-          {!zen && selectedSection && selectedDef && selectedSettings && (
+          {!zen && globalPanel && (
+            <aside
+              className="w-full shrink-0 overflow-y-auto border-b lg:w-80 lg:border-b-0 lg:border-r"
+              style={{ borderColor: "var(--adm-line)", background: "var(--adm-surface)" }}
+            >
+              <div className="p-4">
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs"
+                    style={{ color: "var(--adm-muted)" }}
+                    onClick={() => setGlobalPanel(null)}
+                  >
+                    <ChevronLeft size={13} strokeWidth={2} /> All sections
+                  </button>
+                  <p className="mt-1 font-medium">
+                    {globalPanel === "header" ? "Header" : "Footer"}
+                  </p>
+                  <p className="text-xs" style={{ color: "var(--adm-muted)" }}>
+                    Shared by every page, so this saves straight away — Publish is not needed.
+                  </p>
+                </div>
+
+                {globalPanel === "header" ? (
+                  <HeaderPanel settings={settings} patch={patchSettings} />
+                ) : (
+                  <FooterPanel settings={settings} patch={patchSettings} />
+                )}
+
+                <p className="mt-5 flex items-center gap-2 text-xs" style={{ color: "var(--adm-muted)" }}>
+                  {savingSettings ? (
+                    <>
+                      <Spinner size={11} /> Saving…
+                    </>
+                  ) : (
+                    "Changes to the header and footer go live as you make them."
+                  )}
+                </p>
+              </div>
+            </aside>
+          )}
+
+          {!zen && !globalPanel && selectedSection && selectedDef && selectedSettings && (
             <aside
               className="w-full shrink-0 overflow-y-auto border-b lg:w-80 lg:border-b-0 lg:border-r"
               style={{ borderColor: "var(--adm-line)", background: "var(--adm-surface)" }}
@@ -780,19 +889,7 @@ export function WebsiteEditor({
               />
             </div>
           </div>
-        </div>
-
-        <DragOverlay dropAnimation={null}>
-          {dragging ? (
-            <div
-              className="rounded-lg px-3 py-2 text-[0.8rem] shadow-lg"
-              style={{ background: "var(--adm-surface)", border: "1px solid var(--adm-line)" }}
-            >
-              {dragLabel(sections, dragging)}
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      </div>
 
       {insertAt !== null && (
         <AddSectionPanel

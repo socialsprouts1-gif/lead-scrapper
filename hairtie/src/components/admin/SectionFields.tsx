@@ -68,6 +68,19 @@ export function SectionField({
         </Wrap>
       );
 
+    case "datetime":
+      return (
+        <Wrap field={field} id={id}>
+          <input
+            id={id}
+            type="datetime-local"
+            className="adm-input"
+            value={String(value ?? "")}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </Wrap>
+      );
+
     case "number":
       return (
         <Wrap field={field} id={id}>

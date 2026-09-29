@@ -3,6 +3,8 @@ import { randomBytes } from "node:crypto";
 import { createId, mutate, now, store } from "@/lib/store";
 import { productById } from "@/lib/catalog";
 import { computeTotals, lineMrp, linePrice, type ResolvedCart } from "@/lib/cart";
+import { codAvailableFor, getPaymentSettings } from "@/lib/payments";
+import { isCustomerBlocked } from "@/lib/customers";
 import { getSiteSettings } from "@/lib/settings";
 import type { Order, OrderStatus } from "@/lib/types";
 
@@ -80,8 +82,20 @@ export function createOrderFromCart(resolved: ResolvedCart, details: CheckoutDet
   const lines = resolved.lines.filter((line) => !line.item.savedForLater);
 
   if (lines.length === 0) throw new Error("Your bag is empty.");
-  if (details.paymentMethod === "COD" && !settings.shipping.codEnabled) {
-    throw new Error("Cash on Delivery is not available right now.");
+  if (isCustomerBlocked(details.customerEmail)) {
+    throw new Error("We cannot take an order from this email address.");
+  }
+
+  const payments = getPaymentSettings();
+  const codFee =
+    details.paymentMethod === "COD" ? Math.max(payments.codFeePaise, 0) : 0;
+
+  if (details.paymentMethod === "COD" && !codAvailableFor(totals.total)) {
+    throw new Error(
+      payments.codEnabled
+        ? "Cash on Delivery is not available for an order of this value."
+        : "Cash on Delivery is not available right now.",
+    );
   }
 
   const problems = findStockProblems(resolved);
@@ -113,8 +127,9 @@ export function createOrderFromCart(resolved: ResolvedCart, details: CheckoutDet
     subtotal: totals.subtotal,
     discountAmount: totals.discount,
     shippingFee: totals.shippingFee,
+    codFee,
     taxAmount: totals.taxIncluded,
-    total: totals.total,
+    total: totals.total + codFee,
     couponCode: totals.couponCode,
 
     status: "PENDING",

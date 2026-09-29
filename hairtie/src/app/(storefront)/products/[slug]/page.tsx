@@ -6,6 +6,7 @@ import { mutate } from "@/lib/store";
 import { averageRating, allCategories, productBySlug, relatedProducts, stockOf } from "@/lib/catalog";
 import { approvedReviews } from "@/lib/reviews";
 import { getSiteSettings } from "@/lib/settings";
+import { paymentView } from "@/lib/payments";
 import { buildMetadata, breadcrumbSchema, jsonLd, resolveSiteUrl } from "@/lib/seo";
 import { paiseToRupees, formatPaise } from "@/lib/money";
 import { productInquiryMessage, whatsappLink } from "@/lib/whatsapp";
@@ -66,6 +67,7 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
   const { slug } = await props.params;
   const product = loadProduct(slug);
   const settings = getSiteSettings();
+  const payments = paymentView();
   const wishlist = await getWishlistIds();
   if (!product || product.status === "ARCHIVED") notFound();
 
@@ -270,7 +272,7 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
                     Free shipping on orders above {formatPaise(settings.shipping.freeAbovePaise)}; a flat{" "}
                     {formatPaise(settings.shipping.flatRatePaise)} below that.
                   </li>
-                  {settings.shipping.codEnabled && <li>Cash on Delivery available on most pincodes.</li>}
+                  {payments.codEnabled && <li>Cash on Delivery available on most pincodes.</li>}
                   <li>
                     Returns accepted within 7 days —{" "}
                     <Link href="/shipping-returns" className="ht-underline">read the policy</Link>.

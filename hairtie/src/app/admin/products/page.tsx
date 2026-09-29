@@ -78,6 +78,9 @@ export default async function AdminProductsPage(props: PageProps<"/admin/product
         title="Products"
         description={`${countFor("ACTIVE")} live · ${countFor("DRAFT")} drafts · ${countFor("ARCHIVED")} archived`}
       >
+        <a href="/api/admin/export/products" className="adm-btn adm-btn-ghost" download>
+          Export CSV
+        </a>
         <Link href="/admin/products/new" className="adm-btn adm-btn-primary">
           <Plus size={15} strokeWidth={1.8} /> Add product
         </Link>

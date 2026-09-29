@@ -6,6 +6,9 @@
  * import it without pulling in the server-side store.
  */
 
+export type MenuLink = { label: string; href: string };
+export type MenuItem = MenuLink & { children?: MenuLink[] };
+
 export type SiteSettings = {
   storeName: string;
   tagline: string;
@@ -40,12 +43,10 @@ export type SiteSettings = {
     pinterest: string;
   };
 
+  /** How much delivery costs. How it is *paid for* lives in payment settings. */
   shipping: {
     flatRatePaise: number;
     freeAbovePaise: number;
-    codEnabled: boolean;
-    codFeePaise: number;
-    onlinePaymentEnabled: boolean;
     dispatchNote: string;
   };
 
@@ -74,7 +75,11 @@ export type SiteSettings = {
     showWishlist: boolean;
     showAccount: boolean;
     showCart: boolean;
-    menu: { label: string; href: string }[];
+    /**
+     * Top-level menu. An item with children shows them in a dropdown; one
+     * without falls back to the sub-categories of the category it points at.
+     */
+    menu: MenuItem[];
   };
 };
 
@@ -115,9 +120,6 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   shipping: {
     flatRatePaise: 7900,
     freeAbovePaise: 99900,
-    codEnabled: true,
-    codFeePaise: 0,
-    onlinePaymentEnabled: true,
     dispatchNote: "Orders are dispatched within 24–48 hours.",
   },
   seo: {

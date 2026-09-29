@@ -181,6 +181,8 @@ export type Order = {
   subtotal: number;
   discountAmount: number;
   shippingFee: number;
+  /** Handling charge for paying cash on delivery, if the shop charges one. */
+  codFee: number;
   taxAmount: number;
   total: number;
   couponCode: string | null;
@@ -295,6 +297,18 @@ export type MediaAsset = {
   alt: string;
   folder: string;
   createdAt: string;
+};
+
+/**
+ * What the shop owner has recorded about a customer. There are no accounts, so
+ * a customer is identified by the email address they ordered with.
+ */
+export type CustomerProfile = {
+  email: string;
+  tags: string[];
+  note: string;
+  isBlocked: boolean;
+  updatedAt: string;
 };
 
 export type NewsletterSignup = {
